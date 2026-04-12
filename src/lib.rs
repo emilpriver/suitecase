@@ -29,6 +29,11 @@
 //! helpers (`equal`, `no_error`, `contains`, …) that **panic** on failure, for use in tests and
 //! suite case bodies.
 //!
+//! # Mocking
+//!
+//! The [`mod@mock`] module provides [testify/mock](https://pkg.go.dev/github.com/stretchr/testify/mock)-style
+//! expectations and call recording ([`mock::Mock`], [`mock::mock_args!`]).
+//!
 //! # Example
 //!
 //! ```

@@ -1,41 +1,68 @@
+//! Typed access to values recorded or returned through [`Mock::method_called`](crate::mock::Mock::method_called).
+//!
+//! Values are stored as [`Box<dyn Any + Send>`](std::any::Any); use [`Arguments::get`] or the
+//! helpers [`Arguments::int`], [`Arguments::bool`], [`Arguments::string`], etc.
+
 use std::any::Any;
 use std::fmt;
 
 use super::matchers::Matcher;
 
+/// A list of boxed arguments or return values for a single mock call.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::mock::Arguments;
+///
+/// let a = Arguments::from_boxes(vec![Box::new(40i32), Box::new(2i32)]);
+/// assert_eq!(a.int(0) + a.int(1), 42);
+/// ```
 pub struct Arguments {
     values: Vec<Box<dyn Any + Send>>,
 }
 
 impl Arguments {
+    /// Wraps a vector of boxed values (one per positional argument or return slot).
     pub fn from_boxes(values: Vec<Box<dyn Any + Send>>) -> Self {
         Self { values }
     }
 
+    /// Consumes `self` and returns the underlying boxes.
     pub fn into_boxes(self) -> Vec<Box<dyn Any + Send>> {
         self.values
     }
 
+    /// Number of slots.
     pub fn len(&self) -> usize {
         self.values.len()
     }
 
+    /// `true` when there are no slots.
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
+    /// Raw slice of argument boxes.
     pub fn as_raw(&self) -> &[Box<dyn Any + Send>] {
         &self.values
     }
 
+    /// Returns a reference to slot `index` if its type matches `T`.
     pub fn get<T: 'static>(&self, index: usize) -> Option<&T> {
         self.values.get(index).and_then(|b| b.downcast_ref())
     }
 
+    /// Like [`get`](Self::get) but returns the trait object for custom downcasting.
     pub fn get_box(&self, index: usize) -> Option<&(dyn Any + Send)> {
         self.values.get(index).map(|b| b.as_ref())
     }
 
+    /// Reads an integer slot, accepting several fixed-width integer types.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the slot is missing or not an integer type supported by this helper.
     pub fn int(&self, index: usize) -> i64 {
         self.values
             .get(index)
@@ -55,6 +82,11 @@ impl Arguments {
             .expect("argument is not an integer")
     }
 
+    /// Reads a `bool` slot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the slot is missing or not a `bool`.
     pub fn bool(&self, index: usize) -> bool {
         *self
             .values
@@ -63,6 +95,11 @@ impl Arguments {
             .expect("argument is not bool")
     }
 
+    /// Reads a [`String`] or `&'static str` slot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the slot is missing or not string-like as above.
     pub fn string(&self, index: usize) -> String {
         if let Some(s) = self.get::<String>(index) {
             return s.clone();
@@ -72,6 +109,11 @@ impl Arguments {
             .expect("argument is not a string")
     }
 
+    /// Best-effort string for error-like values (`String`, `&str`, otherwise [`TypeId`](std::any::TypeId) debug).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` is out of range.
     pub fn error_display(&self, index: usize) -> String {
         let b = self.values.get(index).expect("missing argument");
         if let Some(e) = b.downcast_ref::<String>() {
@@ -83,6 +125,24 @@ impl Arguments {
         format!("{}", MockErrorDebug(b.as_ref()))
     }
 
+    /// Compares this argument list against `expected` matchers, notifying `testing` on failure.
+    ///
+    /// Returns `false` after the first failed check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use suitecase::mock::{eq, Arguments, TestingT};
+    ///
+    /// struct T;
+    /// impl TestingT for T {
+    ///     fn errorf(&self, _: &str) {}
+    ///     fn fail_now(&self) {}
+    /// }
+    ///
+    /// let a = Arguments::from_boxes(vec![Box::new(7i32)]);
+    /// assert!(a.assert_matches(&T, &[eq(7i32)]));
+    /// ```
     pub fn assert_matches(&self, testing: &dyn TestingT, expected: &[Box<dyn Matcher>]) -> bool {
         if self.values.len() != expected.len() {
             testing.errorf(&format!(
@@ -118,8 +178,27 @@ impl fmt::Display for MockErrorDebug<'_> {
     }
 }
 
+/// Hooks for reporting assertion failures from mock verification (similar to Go’s `testing.T`).
+///
+/// Implement this for your test context: typically [`errorf`](TestingT::errorf) records a message
+/// and [`fail_now`](TestingT::fail_now) marks the test as failed or aborts the current check.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::mock::TestingT;
+///
+/// struct Counting;
+///
+/// impl TestingT for Counting {
+///     fn errorf(&self, _: &str) {}
+///     fn fail_now(&self) {}
+/// }
+/// ```
 pub trait TestingT {
+    /// Records a failure message (e.g. log or buffer).
     fn errorf(&self, msg: &str);
+    /// Marks the current test or assertion as failed (for example by panicking or setting a flag).
     fn fail_now(&self);
 }
 
