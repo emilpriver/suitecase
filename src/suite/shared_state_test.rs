@@ -1,27 +1,33 @@
-//! Ensures [`test_suite!`] shares one suite across two generated `#[test]`s: the first case seeds
-//! state, the second reads and updates it on the **same** `Mutex` value.
+//! Two `#[test]` functions share one [`SharedState`] behind [`std::sync::Mutex`] in a
+//! [`std::sync::OnceLock`]: `shared_init_state` runs only the `init_state` case, then
+//! `shared_mutate_after_init` waits (without holding the mutex) until that finishes, then runs
+//! `mutate_after_init`. This stays reliable under the default **parallel** test harness.
+//!
+//! For the same wiring via the [`test_suite!`](crate::test_suite) macro, see the crate examples;
+//! run those with `cargo test -- --test-threads=1` if case order must match definition order.
 
 #![allow(unused_imports)]
 
-use crate::{cases, test_suite, Case, HookFns, RunConfig, run};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use crate::{cases, Case, HookFns, RunConfig, run};
 
 #[derive(Default, Debug)]
 struct SharedState {
-    phase: &'static str,
     counter: i32,
 }
 
 static SHARED_CASES: &[Case<SharedState>] = cases![SharedState, s =>
     init_state => {
-        assert_eq!(s.phase, "", "fresh suite");
-        s.phase = "initialized";
+        assert_eq!(s.counter, 0, "fresh shared suite");
         s.counter = 42;
     },
     mutate_after_init => {
-        assert_eq!(s.phase, "initialized", "same suite as init_state");
-        assert_eq!(s.counter, 42);
+        assert_eq!(s.counter, 42, "same suite as init_state");
         s.counter += 1;
-        s.phase = "touched_twice";
     },
 ];
 
@@ -32,18 +38,50 @@ static SHARED_HOOKS: HookFns<SharedState> = HookFns {
     after_each: None,
 };
 
-test_suite!(
-    SharedState,
-    SHARED_STATE_TEST_SUITE,
-    SharedState::default(),
-    SHARED_CASES,
-    SHARED_HOOKS,
-    [init_state, mutate_after_init]
-);
+static SHARED_SUITE: OnceLock<Mutex<SharedState>> = OnceLock::new();
+static INIT_CASE_FINISHED: AtomicBool = AtomicBool::new(false);
 
-/// Control: one `run` with [`RunConfig::all`] applies both cases in order on a single suite (no `Mutex` split).
 #[test]
-fn sequential_run_sets_then_mutates_without_test_suite_split() {
+fn shared_init_state() {
+    INIT_CASE_FINISHED.store(false, Ordering::SeqCst);
+    let mut suite = SHARED_SUITE
+        .get_or_init(|| Mutex::new(SharedState::default()))
+        .lock()
+        .expect("suite mutex poisoned");
+    run(
+        &mut *suite,
+        SHARED_CASES,
+        RunConfig::filter("init_state"),
+        &SHARED_HOOKS,
+    );
+    INIT_CASE_FINISHED.store(true, Ordering::SeqCst);
+}
+
+#[test]
+fn shared_mutate_after_init() {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !INIT_CASE_FINISHED.load(Ordering::SeqCst) {
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for shared_init_state — run both tests in one cargo test invocation"
+        );
+        thread::yield_now();
+    }
+    let mut suite = SHARED_SUITE
+        .get_or_init(|| Mutex::new(SharedState::default()))
+        .lock()
+        .expect("suite mutex poisoned");
+    run(
+        &mut *suite,
+        SHARED_CASES,
+        RunConfig::filter("mutate_after_init"),
+        &SHARED_HOOKS,
+    );
+}
+
+/// Same cases in one `run` with [`RunConfig::all`] (single suite, ordered cases).
+#[test]
+fn sequential_run_matches_shared_increment() {
     let mut suite = SharedState::default();
     run(
         &mut suite,
@@ -51,6 +89,5 @@ fn sequential_run_sets_then_mutates_without_test_suite_split() {
         RunConfig::all(),
         &SHARED_HOOKS,
     );
-    assert_eq!(suite.phase, "touched_twice");
     assert_eq!(suite.counter, 43);
 }
