@@ -1,3 +1,8 @@
+//! Testify-style assertion helpers that **panic** on failure.
+//!
+//! Use these from `#[test]` functions and suite case bodies. Each helper records the caller
+//! location when it panics.
+
 mod boolean;
 mod collections;
 mod equality;
@@ -37,16 +42,55 @@ pub use pointer::{not_same_ref, same_arc, same_ref, same_weak};
 
 pub use time::{within_duration, within_range};
 
+/// Fails the test immediately with `msg`.
+///
+/// # Panics
+///
+/// Always panics.
+///
+/// # Examples
+///
+/// ```should_panic
+/// use suitecase::assert::fail;
+///
+/// fail("expected failure");
+/// ```
 #[track_caller]
 pub fn fail(msg: &str) -> ! {
     panic!("assertion failed: {msg}");
 }
 
+/// Fails the test immediately with a formatted message.
+///
+/// # Panics
+///
+/// Always panics.
+///
+/// # Examples
+///
+/// ```should_panic
+/// use suitecase::assert::fail_fmt;
+///
+/// fail_fmt(format_args!("n={}", 3));
+/// ```
 #[track_caller]
 pub fn fail_fmt(args: std::fmt::Arguments<'_>) -> ! {
     panic!("assertion failed: {args}");
 }
 
+/// Asserts that `ok` is `true`, otherwise fails with `msg`.
+///
+/// # Panics
+///
+/// Panics when `ok` is `false`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::condition;
+///
+/// condition(2 > 1, "ordering");
+/// ```
 #[track_caller]
 pub fn condition(ok: bool, msg: &str) {
     if !ok {
@@ -54,16 +98,58 @@ pub fn condition(ok: bool, msg: &str) {
     }
 }
 
+/// Asserts that `f()` returns `true`, otherwise fails with `msg`.
+///
+/// # Panics
+///
+/// Panics when `f()` is `false`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::condition_fn;
+///
+/// condition_fn(|| 1 + 1 == 2, "math");
+/// ```
 #[track_caller]
 pub fn condition_fn(f: impl FnOnce() -> bool, msg: &str) {
     condition(f(), msg);
 }
 
+/// Asserts that `a` and `b` point to the same allocation (see [`same_ref`]).
+///
+/// # Panics
+///
+/// Panics when the two references do not point to the same allocation.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::same;
+///
+/// let x = 1_i32;
+/// same(&x, &x);
+/// ```
 #[inline]
 pub fn same<T: ?Sized>(a: &T, b: &T) {
     same_ref(a, b);
 }
 
+/// Asserts that `a` and `b` do not point to the same allocation (see [`not_same_ref`]).
+///
+/// # Panics
+///
+/// Panics when the two references point to the same allocation.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_same;
+///
+/// let a = 1_i32;
+/// let b = 1_i32;
+/// not_same(&a, &b);
+/// ```
 #[inline]
 pub fn not_same<T: ?Sized>(a: &T, b: &T) {
     not_same_ref(a, b);

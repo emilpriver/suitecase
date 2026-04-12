@@ -1,7 +1,22 @@
+//! Assertions for strings, slices, maps, and multiset relationships.
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 
+/// Asserts that `haystack` contains `needle` as a substring.
+///
+/// # Panics
+///
+/// Panics when `needle` is not found in `haystack`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::contains_str;
+///
+/// contains_str("hello world", "world");
+/// ```
 #[track_caller]
 pub fn contains_str(haystack: &str, needle: &str) {
     if !haystack.contains(needle) {
@@ -11,6 +26,19 @@ pub fn contains_str(haystack: &str, needle: &str) {
     }
 }
 
+/// Asserts that `slice` contains `item` (same semantics as the slice `contains` method).
+///
+/// # Panics
+///
+/// Panics when `item` is not present in `slice`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::contains;
+///
+/// contains(&[1, 2, 3], &2);
+/// ```
 #[track_caller]
 pub fn contains<T: PartialEq + Debug>(slice: &[T], item: &T) {
     if !slice.contains(item) {
@@ -21,6 +49,22 @@ pub fn contains<T: PartialEq + Debug>(slice: &[T], item: &T) {
     }
 }
 
+/// Asserts that `map` contains `key`.
+///
+/// # Panics
+///
+/// Panics when `key` is missing from `map`.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use suitecase::assert::contains_key;
+///
+/// let mut m = HashMap::new();
+/// m.insert("k", 1);
+/// contains_key(&m, &"k");
+/// ```
 #[track_caller]
 pub fn contains_key<K: Eq + Hash + Debug, V>(map: &HashMap<K, V>, key: &K) {
     if !map.contains_key(key) {
@@ -31,6 +75,19 @@ pub fn contains_key<K: Eq + Hash + Debug, V>(map: &HashMap<K, V>, key: &K) {
     }
 }
 
+/// Asserts that `haystack` does **not** contain `needle` as a substring.
+///
+/// # Panics
+///
+/// Panics when `needle` is found in `haystack`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_contains_str;
+///
+/// not_contains_str("abc", "z");
+/// ```
 #[track_caller]
 pub fn not_contains_str(haystack: &str, needle: &str) {
     if haystack.contains(needle) {
@@ -40,6 +97,19 @@ pub fn not_contains_str(haystack: &str, needle: &str) {
     }
 }
 
+/// Asserts that `slice` does **not** contain `item`.
+///
+/// # Panics
+///
+/// Panics when `item` is present in `slice`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_contains;
+///
+/// not_contains(&[1, 2], &9);
+/// ```
 #[track_caller]
 pub fn not_contains<T: PartialEq + Debug>(slice: &[T], item: &T) {
     if slice.contains(item) {
@@ -50,6 +120,19 @@ pub fn not_contains<T: PartialEq + Debug>(slice: &[T], item: &T) {
     }
 }
 
+/// Asserts that `slice` has length `n`.
+///
+/// # Panics
+///
+/// Panics when `slice.len() != n`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::len;
+///
+/// len(&[1, 2, 3], 3);
+/// ```
 #[track_caller]
 pub fn len<T>(slice: &[T], n: usize) {
     if slice.len() != n {
@@ -60,6 +143,19 @@ pub fn len<T>(slice: &[T], n: usize) {
     }
 }
 
+/// Asserts that `s` has UTF-8 byte length `n` (`s.len()` in bytes).
+///
+/// # Panics
+///
+/// Panics when the byte length differs from `n`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::len_string;
+///
+/// len_string("abc", 3);
+/// ```
 #[track_caller]
 pub fn len_string(s: &str, n: usize) {
     if s.len() != n {
@@ -70,6 +166,19 @@ pub fn len_string(s: &str, n: usize) {
     }
 }
 
+/// Asserts that `s` is empty.
+///
+/// # Panics
+///
+/// Panics when `s` is non-empty.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::empty_str;
+///
+/// empty_str("");
+/// ```
 #[track_caller]
 pub fn empty_str(s: &str) {
     if !s.is_empty() {
@@ -77,6 +186,19 @@ pub fn empty_str(s: &str) {
     }
 }
 
+/// Asserts that `s` is not empty.
+///
+/// # Panics
+///
+/// Panics when `s` is empty.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_empty_str;
+///
+/// not_empty_str("x");
+/// ```
 #[track_caller]
 pub fn not_empty_str(s: &str) {
     if s.is_empty() {
@@ -84,6 +206,19 @@ pub fn not_empty_str(s: &str) {
     }
 }
 
+/// Asserts that `s` has length zero.
+///
+/// # Panics
+///
+/// Panics when the slice is non-empty.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::empty_slice;
+///
+/// empty_slice::<i32>(&[]);
+/// ```
 #[track_caller]
 pub fn empty_slice<T>(s: &[T]) {
     if !s.is_empty() {
@@ -94,6 +229,19 @@ pub fn empty_slice<T>(s: &[T]) {
     }
 }
 
+/// Asserts that `s` is non-empty.
+///
+/// # Panics
+///
+/// Panics when the slice is empty.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_empty_slice;
+///
+/// not_empty_slice(&[1]);
+/// ```
 #[track_caller]
 pub fn not_empty_slice<T>(s: &[T]) {
     if s.is_empty() {
@@ -101,6 +249,20 @@ pub fn not_empty_slice<T>(s: &[T]) {
     }
 }
 
+/// Asserts that `subset` is a **multiset subset** of `superset` (each value in `subset` must
+/// appear in `superset` at least as many times).
+///
+/// # Panics
+///
+/// Panics when an element is missing or has insufficient multiplicity.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::subset;
+///
+/// subset(&[1, 2, 2, 3], &[2, 1]);
+/// ```
 #[track_caller]
 pub fn subset<T>(superset: &[T], subset: &[T])
 where
@@ -127,6 +289,19 @@ where
     }
 }
 
+/// Asserts that `subset` is **not** a multiset subset of `superset`.
+///
+/// # Panics
+///
+/// Panics when `subset` is a multiset subset of `superset`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_subset;
+///
+/// not_subset(&[1, 2], &[1, 2, 3]);
+/// ```
 #[track_caller]
 pub fn not_subset<T>(superset: &[T], subset: &[T])
 where
@@ -157,6 +332,19 @@ where
     true
 }
 
+/// Asserts that `left` and `right` have the same length and the same multiset of elements.
+///
+/// # Panics
+///
+/// Panics on length mismatch or multiset mismatch.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::elements_match;
+///
+/// elements_match(&[1, 2, 2], &[2, 1, 2]);
+/// ```
 #[track_caller]
 pub fn elements_match<T>(left: &[T], right: &[T])
 where
@@ -187,6 +375,20 @@ where
     }
 }
 
+/// Asserts that `left` and `right` do **not** have the same multiset of elements (when lengths
+/// match); if lengths differ, this returns without panicking.
+///
+/// # Panics
+///
+/// Panics when both slices have the same length and the same multiset of elements.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::not_elements_match;
+///
+/// not_elements_match(&[1, 2], &[1, 3]);
+/// ```
 #[track_caller]
 pub fn not_elements_match<T>(left: &[T], right: &[T])
 where

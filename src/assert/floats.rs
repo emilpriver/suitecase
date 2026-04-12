@@ -1,3 +1,18 @@
+//! Floating-point comparisons for tests (absolute delta and relative epsilon).
+
+/// Asserts that `actual` is within `delta` of `expected` (absolute tolerance, `f64`).
+///
+/// # Panics
+///
+/// Panics when `|expected - actual| > delta`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::in_delta_f64;
+///
+/// in_delta_f64(1.0, 1.0001, 1e-3);
+/// ```
 #[track_caller]
 pub fn in_delta_f64(expected: f64, actual: f64, delta: f64) {
     if (expected - actual).abs() > delta {
@@ -7,6 +22,19 @@ pub fn in_delta_f64(expected: f64, actual: f64, delta: f64) {
     }
 }
 
+/// Asserts that `actual` is within `delta` of `expected` (absolute tolerance, `f32`).
+///
+/// # Panics
+///
+/// Panics when `|expected - actual| > delta`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::in_delta_f32;
+///
+/// in_delta_f32(2.0_f32, 2.0001, 1e-3);
+/// ```
 #[track_caller]
 pub fn in_delta_f32(expected: f32, actual: f32, delta: f32) {
     if (expected - actual).abs() > delta {
@@ -16,6 +44,19 @@ pub fn in_delta_f32(expected: f32, actual: f32, delta: f32) {
     }
 }
 
+/// Like [`in_delta_f64`], but compares two slices element-wise (lengths must match).
+///
+/// # Panics
+///
+/// Panics on length mismatch or when any pair exceeds `delta`.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::in_delta_slice_f64;
+///
+/// in_delta_slice_f64(&[1.0, 2.0], &[1.0, 2.0001], 1e-2);
+/// ```
 #[track_caller]
 pub fn in_delta_slice_f64(expected: &[f64], actual: &[f64], delta: f64) {
     if expected.len() != actual.len() {
@@ -34,6 +75,19 @@ pub fn in_delta_slice_f64(expected: &[f64], actual: &[f64], delta: f64) {
     }
 }
 
+/// Asserts relative closeness: `|expected - actual| <= epsilon * max(|expected|, |actual|, 1e-12)`.
+///
+/// # Panics
+///
+/// Panics when the inequality does not hold.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::in_epsilon_f64;
+///
+/// in_epsilon_f64(100.0, 100.0001, 1e-5);
+/// ```
 #[track_caller]
 pub fn in_epsilon_f64(expected: f64, actual: f64, epsilon: f64) {
     let denom = expected.abs().max(actual.abs()).max(1e-12);
@@ -44,6 +98,19 @@ pub fn in_epsilon_f64(expected: f64, actual: f64, epsilon: f64) {
     }
 }
 
+/// Like [`in_epsilon_f64`], but compares two slices element-wise.
+///
+/// # Panics
+///
+/// Panics on length mismatch or when any pair fails the epsilon check.
+///
+/// # Examples
+///
+/// ```
+/// use suitecase::assert::in_epsilon_slice_f64;
+///
+/// in_epsilon_slice_f64(&[10.0, 20.0], &[10.0, 20.0000001], 1e-6);
+/// ```
 #[track_caller]
 pub fn in_epsilon_slice_f64(expected: &[f64], actual: &[f64], epsilon: f64) {
     if expected.len() != actual.len() {
