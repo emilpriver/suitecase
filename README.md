@@ -124,8 +124,6 @@ fn main() {
 }
 ```
 
-Or set `SUITCASE_FILTER=test_b` and use [`RunConfig::from_env()`](https://docs.rs/suitcase/latest/suitcase/suite/struct.RunConfig.html#method.from_env).
-
 ### Show each case in `cargo test`
 
 Rust lists one line per `#[test]`. To list **each case** separately, use [`cargo_case_tests!`](https://docs.rs/suitcase/latest/suitcase/macro.cargo_case_tests.html) (default hooks) or [`cargo_case_tests_with_hooks!`](https://docs.rs/suitcase/latest/suitcase/macro.cargo_case_tests_with_hooks.html) at the **root** of an integration test file (`tests/*.rs`):

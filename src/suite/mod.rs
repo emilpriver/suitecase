@@ -97,16 +97,6 @@ impl RunConfig {
             filter: Some(name.into()),
         }
     }
-
-    /// Reads [`RunConfig::filter`] from the environment variable `SUITCASE_FILTER`.
-    /// Empty or unset means no filter (same as [`RunConfig::all`]).
-    pub fn from_env() -> Self {
-        Self {
-            filter: std::env::var("SUITCASE_FILTER")
-                .ok()
-                .filter(|s| !s.is_empty()),
-        }
-    }
 }
 
 /// Run the selected cases on `suite` using `hooks` for lifecycle callbacks.
