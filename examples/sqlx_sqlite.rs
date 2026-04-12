@@ -95,7 +95,7 @@ fn db_setup_suite(s: &mut DbSuite) {
             .await
             .expect("sqlite connect");
 
-        sqlx::migrate!("tests/sqlx_sqlite_migrations")
+        sqlx::migrate!("examples/sqlx_sqlite_migrations")
             .run(&pool)
             .await
             .expect("apply migrations");
@@ -154,8 +154,7 @@ static DB_SUITE_CASES: &[Case<DbSuite>] = cases_fn![
     test_assert_final_counts => test_assert_final_counts,
 ];
 
-#[test]
-fn sqlx_sqlite_suite_mutates_db_between_cases() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = Runtime::new()?;
 
     let mut suite = DbSuite::new(rt.handle().clone());
