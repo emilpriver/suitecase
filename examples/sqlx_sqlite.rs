@@ -213,7 +213,7 @@ test_suite!(
     DbSuite::default(),
     MY_HOOKS,
     s =>
-    test_insert_alice => { case_insert_alice(s); },
+    insert_alice => { case_insert_alice(s); },
     test_insert_bob => { case_insert_bob(s); },
     test_bump_alice_version => { case_bump_alice_version(s); },
     test_assert_final_counts => { case_assert_final_counts(s); },
