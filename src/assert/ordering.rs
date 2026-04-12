@@ -29,10 +29,7 @@ pub fn greater_or_equal<T: Ord + Debug>(a: &T, b: &T) {
 #[track_caller]
 pub fn less<T: Ord + Debug>(a: &T, b: &T) {
     if cmp_or_panic(a, b) != Ordering::Less {
-        panic!(
-            "assertion failed: `less`\n  expected `{:?}` < `{:?}`",
-            a, b
-        );
+        panic!("assertion failed: `less`\n  expected `{:?}` < `{:?}`", a, b);
     }
 }
 

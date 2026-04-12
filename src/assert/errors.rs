@@ -25,9 +25,7 @@ pub fn equal_error_display(err: &dyn Error, expected: &str) {
 pub fn error_contains(err: &dyn Error, needle: &str) {
     let s = err.to_string();
     if !s.contains(needle) {
-        panic!(
-            "assertion failed: `error_contains`\n  needle: `{needle}`\n  display: `{s}`"
-        );
+        panic!("assertion failed: `error_contains`\n  needle: `{needle}`\n  display: `{s}`");
     }
 }
 
@@ -41,9 +39,7 @@ pub fn error_chain_contains(err: &dyn Error, needle: &str) {
         s = e.source();
     }
     if !buf.contains(needle) {
-        panic!(
-            "assertion failed: `error_chain_contains`\n  needle: `{needle}`\n  chain: `{buf}`"
-        );
+        panic!("assertion failed: `error_chain_contains`\n  needle: `{needle}`\n  chain: `{buf}`");
     }
 }
 
