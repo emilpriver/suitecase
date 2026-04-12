@@ -23,6 +23,12 @@
 //! | [`cases!`](crate::cases) | Build `&'static [Case<S>]` from inline blocks per case |
 //! | [`test_suite!`](crate::test_suite) | Emit one `#[test]` per case; all share one `Mutex` suite (optional inline [`cases!`] syntax so names are not repeated) |
 //!
+//! # Assertions
+//!
+//! The [`assert`] module provides [testify](https://pkg.go.dev/github.com/stretchr/testify/assert)-style
+//! helpers (`equal`, `no_error`, `contains`, …) that **panic** on failure, for use in tests and
+//! suite case bodies.
+//!
 //! # Example
 //!
 //! ```
@@ -42,6 +48,7 @@
 //! assert_eq!(suite.n, 1);
 //! ```
 
+pub mod assert;
 pub mod suite;
 
 pub use suite::{Case, HookFns, RunConfig, run};
