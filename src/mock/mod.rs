@@ -47,7 +47,7 @@ mod arguments;
 mod matchers;
 
 pub use arguments::{Arguments, TestingT};
-pub use matchers::{anything, anything_of_type, eq, matched_by, Matcher};
+pub use matchers::{Matcher, anything, anything_of_type, eq, matched_by};
 
 use std::any::Any;
 use std::sync::Mutex;
