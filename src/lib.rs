@@ -25,7 +25,7 @@
 //!
 //! # Assertions
 //!
-//! The [`assert`] module provides [testify](https://pkg.go.dev/github.com/stretchr/testify/assert)-style
+//! The [`mod@assert`] module provides [testify](https://pkg.go.dev/github.com/stretchr/testify/assert)-style
 //! helpers (`equal`, `no_error`, `contains`, …) that **panic** on failure, for use in tests and
 //! suite case bodies.
 //!

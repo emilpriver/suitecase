@@ -1,7 +1,55 @@
-//! Testify-style assertion helpers that **panic** on failure.
+//! Panicking assertion helpers for tests (in the spirit of Go’s
+//! [testify/assert](https://pkg.go.dev/github.com/stretchr/testify/assert)).
 //!
-//! Use these from `#[test]` functions and suite case bodies. Each helper records the caller
-//! location when it panics.
+//! Import the names you need from this module (`suitecase::assert`):
+//!
+//! ```
+//! use suitecase::assert::{equal, contains, assert_ok};
+//! ```
+//!
+//! # When to use
+//!
+//! Use these inside [`#[test]`](https://doc.rust-lang.org/reference/attributes/testing.html#the-test-attribute)
+//! functions, suite case bodies, or anywhere you want a **named** check that **fails the test by
+//! panicking** with a clear message. They complement `assert!` / `assert_eq!` with richer diagnostics
+//! for common patterns (collections, errors, floats, options, ordering, …).
+//!
+//! # Panics and caller location
+//!
+//! Every public function in this module **panics** when its condition is not met (see each item’s
+//! **Panics** section). Functions are annotated with [`#[track_caller]`](https://doc.rust-lang.org/std/panic/struct.Location.html),
+//! so the panic points at the **call site** in your test, not inside this crate.
+//!
+//! # Submodules
+//!
+//! Implementation is split across private submodules (`boolean`, `collections`, `equality`, …);
+//! every public helper is re-exported from this module so you can use a flat import path.
+//!
+//! | Subdirectory | Role |
+//! |--------------|------|
+//! | `boolean` | `true_`, `false_`, and `_with_msg` variants |
+//! | `collections` | Strings, slices, maps, multiset subset / equality |
+//! | `equality` | `equal`, `not_equal`, `equal_values`, messages |
+//! | `errors` | [`std::error::Error`] chains, downcasts, I/O kinds |
+//! | `floats` | Absolute delta and relative epsilon for floats |
+//! | `fs` | File and directory existence |
+//! | `option_result` | [`Option`], [`Result`], “is zero” checks |
+//! | `ordering` | Comparisons and monotonic slices |
+//! | `panic` | Expect panics / no panic, substring match |
+//! | `pointer` | Same allocation (`std::sync::Arc`, `std::sync::Weak`, references) |
+//! | `time` | [`std::time::Duration`] tolerances |
+//!
+//! Root-level helpers such as [`fail`], [`condition`], and [`same`] are defined in this module.
+//!
+//! # Example
+//!
+//! ```
+//! use suitecase::assert::{contains_str, equal, assert_ok};
+//!
+//! let value = assert_ok(Ok::<_, &str>(42));
+//! equal(&value, &42);
+//! contains_str("hello world", "world");
+//! ```
 
 mod boolean;
 mod collections;
