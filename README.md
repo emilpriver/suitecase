@@ -4,13 +4,15 @@
 
 **Heavy development:** The API is still evolving. Expect **breaking changes** between releases until a stable 1.0; pin an exact version (or git revision) in `Cargo.toml` if you need upgrades to be predictable.
 
-**Install · [Usage](#usage) · [Examples](#examples) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
+**Install · [Usage](#usage) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [AI-assisted changes](AI_USAGE.md) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
 
 ---
 
 - **Sync runner** — [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html) orchestrates hooks and case bodies; integrate async I/O with something like `tokio::runtime::Handle::block_on` in hooks or cases.
 - **Hooks as optional fns** — [`HookFns`](https://docs.rs/suitecase/latest/suitecase/suite/struct.HookFns.html) holds `Option<fn(&mut S)>` per lifecycle slot; use [`None`] to skip.
 - **Macros** — [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html) builds `&'static [Case<S>]`. [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) emits one `#[test]` per case name; each run uses [`RunConfig::filter`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.filter) and the **same** shared suite (see macro docs for `Send` and ordering).
+- **Assertions** — [`suitecase::assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) provides [testify/assert](https://pkg.go.dev/github.com/stretchr/testify/assert)-style helpers (`equal`, `contains`, `assert_ok`, …) that **panic** on failure with clear messages ([`#[track_caller]`](https://doc.rust-lang.org/stable/std/panic/struct.Location.html) where applicable).
+- **Mocking** — [`suitecase::mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) provides [testify/mock](https://pkg.go.dev/github.com/stretchr/testify/mock)-style **expectations** and **call recording** ([`Mock`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html), [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html)). Use [`suitecase::mock_args`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html) at the crate root (same macro).
 
 ---
 
@@ -94,6 +96,45 @@ test_suite!(
 
 Run: `cargo test`. See the macro’s rustdoc for **ordering** (parallel harness) vs a single [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html) with [`RunConfig::all`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.all).
 
+### Assertions (`assert`)
+
+Import helpers from [`suitecase::assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) inside `#[test]` functions, suite case bodies, or anywhere you want a **named** check that fails by **panicking** with a readable message.
+
+```rust
+use suitecase::assert::{assert_ok, contains_str, equal};
+
+let n = assert_ok(Ok::<_, &str>(42));
+equal(&n, &42);
+contains_str("hello world", "world");
+```
+
+See the module docs for the full flat list (collections, errors, floats, options/results, ordering, panics, pointers, time, …).
+
+### Mocking (`mock`)
+
+[`suitecase::mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) is for **test doubles**: register expectations on a [`Mock`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html), forward calls from your stub with [`method_called`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html#method.method_called) and [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html), then verify with [`assert_expectations`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html#method.assert_expectations) and a small [`TestingT`](https://docs.rs/suitecase/latest/suitecase/mock/trait.TestingT.html) implementation.
+
+```rust
+use suitecase::mock::{eq, Mock, TestingT};
+
+struct NoopT;
+impl TestingT for NoopT {
+    fn errorf(&self, _: &str) {}
+    fn fail_now(&self) {}
+}
+
+let m = Mock::new();
+m.on("greet", vec![eq("Ada".to_string())])
+    .returning(|| vec![Box::new("Hello, Ada".to_string())])
+    .finish();
+
+let out = m.method_called("greet", suitecase::mock_args!("Ada".to_string()));
+assert_eq!(out.string(0), "Hello, Ada");
+assert!(m.assert_expectations(&NoopT));
+```
+
+Unexpected calls **panic** from [`method_called`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html#method.method_called) (see rustdoc). Matchers include [`eq`](https://docs.rs/suitecase/latest/suitecase/mock/fn.eq.html), [`anything`](https://docs.rs/suitecase/latest/suitecase/mock/fn.anything.html), [`anything_of_type`](https://docs.rs/suitecase/latest/suitecase/mock/fn.anything_of_type.html), [`matched_by`](https://docs.rs/suitecase/latest/suitecase/mock/fn.matched_by.html).
+
 ---
 
 ## Examples
@@ -101,6 +142,7 @@ Run: `cargo test`. See the macro’s rustdoc for **ordering** (parallel harness)
 | Example | Run |
 |--------|-----|
 | [`examples/quickstart.rs`](examples/quickstart.rs) | `cargo test --example quickstart` |
+| [`examples/mock.rs`](examples/mock.rs) | `cargo run --example mock` · `cargo test --example mock` (mocked HTTP-style JSON) |
 | [`examples/sqlx_sqlite.rs`](examples/sqlx_sqlite.rs) | `cargo test --example sqlx_sqlite` |
 | Every example at once | `cargo test --examples` |
 | Integration tests ([`tests/suite.rs`](tests/suite.rs)) | `cargo test` |
@@ -118,5 +160,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 ## More documentation
 
+- **[`AI_USAGE.md`](AI_USAGE.md)** — using LLMs to draft changes is allowed; you must understand the patch, justify it in review, and avoid unnecessary complexity (see file).
 - **`cargo doc --open`** — [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html) and [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) include declaration / description / examples.
 - Crate root and [`suite`](https://docs.rs/suitecase/latest/suitecase/suite/index.html) describe how [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html) selects cases and orders hooks.
+- [`assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) — panicking assertion helpers (submodules per domain; flat re-exports at the module root).
+- [`mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) — `Mock`, matchers, [`Arguments`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Arguments.html), [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html).
