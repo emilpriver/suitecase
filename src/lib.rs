@@ -29,7 +29,7 @@
 //! # Example
 //!
 //! ```
-//! use suitcase::{run, suite_methods, Case, HookFns, RunConfig};
+//! use suitecase::{run, suite_methods, Case, HookFns, RunConfig};
 //!
 //! #[derive(Default)]
 //! struct Counter {

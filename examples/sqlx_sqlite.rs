@@ -1,18 +1,26 @@
+//! sqlx + SQLite + embedded migrations. Run: `cargo test --example sqlx_sqlite`
+
+#![allow(dead_code)]
+
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
 use std::future::Future;
-use suitecase::{Case, HookFns, RunConfig, cases_fn, run};
+use suitecase::{cargo_case_tests_with_hooks, cases_fn, Case, HookFns};
 use tokio::runtime::{Handle, Runtime};
 
 struct DbSuite {
+    _rt: Runtime,
     handle: Handle,
     pool: Option<SqlitePool>,
     before_each_calls: u32,
 }
 
 impl DbSuite {
-    fn new(handle: Handle) -> Self {
+    fn new() -> Self {
+        let _rt = Runtime::new().expect("tokio Runtime");
+        let handle = _rt.handle().clone();
         Self {
+            _rt,
             handle,
             pool: None,
             before_each_calls: 0,
@@ -37,6 +45,12 @@ impl DbSuite {
         let q = format!("SELECT COUNT(*) AS c FROM {table}");
         let row = sqlx::query(&q).fetch_one(pool).await.unwrap();
         row.get::<i64, _>("c")
+    }
+}
+
+impl Default for DbSuite {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -185,14 +199,14 @@ fn db_after_each(s: &mut DbSuite) {
     });
 }
 
-static DB_SUITE_HOOKS: HookFns<DbSuite> = HookFns {
+static MY_HOOKS: HookFns<DbSuite> = HookFns {
     setup_suite: Some(db_setup_suite),
     teardown_suite: Some(db_teardown_suite),
     before_each: Some(db_before_each),
     after_each: Some(db_after_each),
 };
 
-static DB_SUITE_CASES: &[Case<DbSuite>] = cases_fn![
+static MY_CASES: &[Case<DbSuite>] = cases_fn![
     DbSuite =>
     test_insert_alice => case_insert_alice,
     test_insert_bob => case_insert_bob,
@@ -200,23 +214,11 @@ static DB_SUITE_CASES: &[Case<DbSuite>] = cases_fn![
     test_assert_final_counts => case_assert_final_counts,
 ];
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rt = Runtime::new()?;
+cargo_case_tests_with_hooks!(
+    DbSuite::default(),
+    MY_CASES,
+    MY_HOOKS,
+    [test_insert_alice, test_insert_bob, test_bump_alice_version, test_assert_final_counts]
+);
 
-    let mut suite = DbSuite::new(rt.handle().clone());
-
-    run(
-        &mut suite,
-        DB_SUITE_CASES,
-        RunConfig::all(),
-        &DB_SUITE_HOOKS,
-    );
-
-    let users = rt.block_on(DbSuite::count_rows(suite.pool(), "users"));
-    let ops = rt.block_on(DbSuite::count_rows(suite.pool(), "op_log"));
-    assert_eq!(users, 2);
-    assert!(ops >= 10, "expected hook + case log rows, got {ops}");
-    println!("done: users={users}, op_log rows={ops}");
-
-    Ok(())
-}
+fn main() {}

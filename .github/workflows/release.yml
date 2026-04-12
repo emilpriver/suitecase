@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           TAG="${{ github.event.release.tag_name }}"
           TAG_VER="${TAG#v}"
-          CRATE_VER=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="suitcase") | .version')
+          CRATE_VER=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="suitecase") | .version')
           echo "Release tag: ${TAG} (expected version: ${TAG_VER})"
           echo "Cargo.toml version: ${CRATE_VER}"
           if [ "${TAG_VER}" != "${CRATE_VER}" ]; then

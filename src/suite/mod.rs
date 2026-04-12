@@ -200,7 +200,7 @@ fn run_hooks<S, FS, FT, FB, FA>(
 /// # Example
 ///
 /// ```
-/// use suitcase::{run, suite_methods, Case, HookFns, RunConfig};
+/// use suitecase::{run, suite_methods, Case, HookFns, RunConfig};
 ///
 /// #[derive(Default)]
 /// struct MySuite {
@@ -243,7 +243,7 @@ macro_rules! suite_methods {
 /// # Example
 ///
 /// ```
-/// use suitcase::{cases, run, Case, HookFns, RunConfig};
+/// use suitecase::{cases, run, Case, HookFns, RunConfig};
 ///
 /// #[derive(Default)]
 /// struct MySuite {
@@ -281,7 +281,7 @@ macro_rules! cases {
 /// # Example
 ///
 /// ```
-/// use suitcase::{cases_fn, run, Case, HookFns, RunConfig};
+/// use suitecase::{cases_fn, run, Case, HookFns, RunConfig};
 ///
 /// #[derive(Default)]
 /// struct MySuite {
@@ -329,7 +329,7 @@ macro_rules! cases_fn {
 /// Place the invocation in an integration test crate root (not inside a function):
 ///
 /// ```text
-/// use suitcase::{cargo_case_tests, suite_methods, Case, HookFns};
+/// use suitecase::{cargo_case_tests, suite_methods, Case, HookFns};
 ///
 /// #[derive(Default)]
 /// struct S { /* … */ }
@@ -374,7 +374,7 @@ macro_rules! cargo_case_tests {
 /// # Example
 ///
 /// ```text
-/// use suitcase::{cargo_case_tests_with_hooks, suite_methods, Case, HookFns};
+/// use suitecase::{cargo_case_tests_with_hooks, suite_methods, Case, HookFns};
 ///
 /// fn setup(s: &mut MySuite) { /* … */ }
 ///
