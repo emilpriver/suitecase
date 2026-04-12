@@ -2,7 +2,7 @@
 
 The library package name is **`suitcase`** — use `suitcase = "0.1"` in `Cargo.toml` (or `path` / `git` as below).
 
-Structured test suites for Rust: **setup** / **teardown** at suite scope and **before_each** / **after_each** around each case, with optional filtering so a single case still runs the right hooks.
+**The structured test toolkit.** A lightweight sync Rust library for **named cases**, optional **setup** / **teardown** at suite scope and **before_each** / **after_each** around each case, plus macros so every case can show up as its own line in **cargo test**—without a custom harness or DSL. Filter to a single case when you want isolation; hooks still run in the right order.
 
 **Heavy development:** The API is still evolving. Expect **breaking changes** between releases until a stable 1.0; pin an exact version (or git revision) in `Cargo.toml` if you need upgrades to be predictable.
 
@@ -32,6 +32,8 @@ suitcase = "0.1"
 
 ### Quickstart
 
+Put this in `tests/suite.rs` (integration test) or inside `#[cfg(test)] mod tests { ... }` in your crate:
+
 ```rust
 use suitcase::{run, suite_methods, Case, HookFns, RunConfig};
 
@@ -48,12 +50,15 @@ impl Counter {
 
 static CASES: &[Case<Counter>] = suite_methods![Counter, s => test_inc];
 
-fn main() {
+#[test]
+fn quickstart() {
     let mut suite = Counter::default();
     run(&mut suite, CASES, RunConfig::all(), &HookFns::default());
     assert_eq!(suite.n, 1);
 }
 ```
+
+Run: `cargo test`
 
 ### Hooks
 
@@ -86,12 +91,15 @@ static HOOKS: HookFns<State> = HookFns {
     after_each: None,
 };
 
-fn main() {
+#[test]
+fn hooks_run_in_order() {
     let mut suite = State::default();
     run(&mut suite, CASES, RunConfig::all(), &HOOKS);
     assert_eq!(suite.log, vec!["setup", "case"]);
 }
 ```
+
+Run: `cargo test`
 
 ### Run a single case (filter)
 
@@ -114,7 +122,8 @@ impl Counter {
 
 static CASES: &[Case<Counter>] = suite_methods![Counter, s => test_a, test_b];
 
-fn main() {
+#[test]
+fn filter_runs_one_case() {
     let mut suite = Counter::default();
     run(
         &mut suite,
@@ -125,6 +134,8 @@ fn main() {
     assert_eq!(suite.n, 2);
 }
 ```
+
+Run: `cargo test`
 
 ### Show each case in `cargo test`
 
@@ -139,6 +150,8 @@ use suitcase::{cargo_case_tests_with_hooks, suite_methods, Case, HookFns};
 cargo_case_tests_with_hooks!(MySuite::default(), MY_CASES, MY_HOOKS, [test_a, test_b]);
 ```
 
+Run: `cargo test` — you should see one test per listed case name.
+
 Each case body should be correct when it is the **only** case selected (fresh suite state unless you seed in the body).
 
 ---
@@ -148,6 +161,7 @@ Each case body should be correct when it is the **only** case selected (fresh su
 | Example | Run |
 |--------|-----|
 | [`examples/sqlx_sqlite.rs`](examples/sqlx_sqlite.rs) | `cargo run --example sqlx_sqlite` |
+| Integration tests in this repo ([`tests/`](tests/)) | `cargo test` |
 
 That example uses **sqlx** + **tokio**, applies embedded migrations in `setup_suite`, and runs several free-function cases with [`cases_fn!`](https://docs.rs/suitcase/latest/suitcase/macro.cases_fn.html) and [`HookFns`](https://docs.rs/suitcase/latest/suitcase/suite/struct.HookFns.html). Enable the same stack in your crate if you copy the pattern:
 
@@ -158,7 +172,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
-Integration tests in this repo under [`tests/`](tests/) mirror the same APIs (`tests/suite.rs`, `tests/sqlx_sqlite.rs`).
+See [`tests/suite.rs`](tests/suite.rs) and [`tests/sqlx_sqlite.rs`](tests/sqlx_sqlite.rs) for full implementations of these patterns.
 
 ---
 

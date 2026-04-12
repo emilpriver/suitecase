@@ -1,4 +1,6 @@
-//! Structured test suites with optional lifecycle hooks and named **cases** you run through [`run`].
+//! **The structured test toolkit.** A sync Rust library for named **cases**, optional lifecycle
+//! hooks, and [`cargo test`](https://doc.rust-lang.org/cargo/commands/cargo-test.html) integration
+//! via [`run`]—without a custom harness or DSL.
 //!
 //! # How a run works
 //!
