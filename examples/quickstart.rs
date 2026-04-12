@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use suitecase::{Case, HookFns, RunConfig, cases, run, test_suite};
+use suitecase::{HookFns, RunConfig, run, test_suite};
 
 #[derive(Default)]
 struct Counter {
@@ -30,11 +30,6 @@ impl Counter {
     }
 }
 
-static MY_CASES: &[Case<Counter>] = cases![Counter, s =>
-    test_inc => { s.test_inc(); },
-    test_inc_verify => { s.test_inc_verify(); },
-];
-
 static MY_HOOKS: HookFns<Counter> = HookFns {
     setup_suite: None,
     teardown_suite: None,
@@ -45,10 +40,12 @@ static MY_HOOKS: HookFns<Counter> = HookFns {
 test_suite!(
     Counter,
     MY_SHARED_SUITE,
-    Counter::default(),
     MY_CASES,
+    Counter::default(),
     MY_HOOKS,
-    [test_inc, test_inc_verify]
+    s =>
+    test_inc => { s.test_inc(); },
+    test_inc_verify => { s.test_inc_verify(); },
 );
 
 fn quickstart_body() {
