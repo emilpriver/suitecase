@@ -264,3 +264,6 @@ mod suite_test;
 
 #[cfg(test)]
 mod shared_state_test;
+
+#[cfg(test)]
+mod cargo_filter_output_test;

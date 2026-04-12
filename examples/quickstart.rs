@@ -1,13 +1,16 @@
 //! Mirrors the README **Quickstart** section.
 //!
-//! Run: `cargo test --example quickstart`
+//! Run: `cargo test --example quickstart` — two `#[test]` lines from [`test_suite!`], sharing one
+//! suite. [`main`] uses [`RunConfig::all`] so `cargo run --example quickstart` runs every case in
+//! order on one suite.
 //!
-//! One `#[test]` runs every case in order on **one** suite via [`RunConfig::all`]. For **one line
-//! per case in `cargo test`** with a shared suite, use [`test_suite!`] in the crate docs.
+//! The second generated test assumes the first has already run on the shared suite; with the
+//! default parallel harness that order is not guaranteed. If `test_inc_verify` fails, run:
+//! `cargo test --example quickstart -- --test-threads=1`.
 
 #![allow(dead_code)]
 
-use suitecase::{Case, HookFns, RunConfig, cases, run};
+use suitecase::{cases, run, test_suite, Case, HookFns, RunConfig};
 
 #[derive(Default)]
 struct Counter {
@@ -39,14 +42,18 @@ static MY_HOOKS: HookFns<Counter> = HookFns {
     after_each: None,
 };
 
+test_suite!(
+    Counter,
+    MY_SHARED_SUITE,
+    Counter::default(),
+    MY_CASES,
+    MY_HOOKS,
+    [test_inc, test_inc_verify]
+);
+
 fn quickstart_body() {
     let mut suite = Counter::default();
     run(&mut suite, MY_CASES, RunConfig::all(), &MY_HOOKS);
-}
-
-#[test]
-fn quickstart() {
-    quickstart_body();
 }
 
 fn main() {

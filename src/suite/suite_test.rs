@@ -1,3 +1,5 @@
+use core::panic;
+
 use crate::{Case, HookFns, RunConfig, run};
 
 #[derive(Default)]
