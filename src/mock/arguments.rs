@@ -48,10 +48,8 @@ impl Arguments {
                     Some(*v as i64)
                 } else if let Some(v) = b.downcast_ref::<u32>() {
                     Some(*v as i64)
-                } else if let Some(v) = b.downcast_ref::<u64>() {
-                    Some(*v as i64)
                 } else {
-                    None
+                    b.downcast_ref::<u64>().map(|v| *v as i64)
                 }
             })
             .expect("argument is not an integer")

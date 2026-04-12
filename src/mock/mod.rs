@@ -11,6 +11,8 @@ use std::time::Duration;
 use arguments::Arguments as Args;
 use matchers::Matcher;
 
+type RunHook = Box<dyn Fn(&Args) + Send + 'static>;
+
 pub struct Mock {
     inner: Mutex<MockInner>,
 }
@@ -34,7 +36,7 @@ struct Expectation {
     remaining: Option<u32>,
     maybe: bool,
     removed: bool,
-    run: Option<Box<dyn Fn(&Args) + Send + 'static>>,
+    run: Option<RunHook>,
     delay: Option<Duration>,
     panic_msg: Option<String>,
     invocations: u32,
@@ -59,7 +61,7 @@ where
     method: &'static str,
     matchers: Vec<Box<dyn Matcher>>,
     f: F,
-    run: Option<Box<dyn Fn(&Args) + Send + 'static>>,
+    run: Option<RunHook>,
     delay: Option<Duration>,
     panic_msg: Option<String>,
     maybe: bool,
@@ -186,6 +188,12 @@ impl ActiveExpectation<'_> {
     }
 }
 
+impl Default for Mock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Mock {
     pub fn new() -> Self {
         Self {
@@ -217,7 +225,7 @@ impl Mock {
                 if exp.removed || exp.method != method {
                     continue;
                 }
-                let can = exp.remaining.map_or(true, |n| n > 0);
+                let can = exp.remaining.is_none_or(|n| n > 0);
                 let ok = can && args_match(&exp.matchers, args.as_raw());
                 if ok {
                     matched_idx = Some(i);
@@ -245,9 +253,7 @@ impl Mock {
                 }
                 let sleep = exp.delay;
                 let panic_m = exp.panic_msg.clone();
-                let ret_fn = match &exp.return_gen {
-                    ReturnGen::Fn(f) => f,
-                };
+                let ReturnGen::Fn(ret_fn) = &exp.return_gen;
                 let out = ret_fn();
                 (sleep, panic_m, out)
             };
