@@ -40,7 +40,7 @@ impl DbSuite {
     }
 }
 
-fn test_insert_alice(s: &mut DbSuite) {
+fn case_insert_alice(s: &mut DbSuite) {
     s.block_on(async {
         sqlx::query("INSERT INTO users (name, version) VALUES (?, ?)")
             .bind("alice")
@@ -51,40 +51,86 @@ fn test_insert_alice(s: &mut DbSuite) {
     });
 }
 
-fn test_insert_bob(s: &mut DbSuite) {
+fn case_insert_bob(s: &mut DbSuite) {
     s.block_on(async {
+        let pool = s.pool();
+        let has_alice = sqlx::query("SELECT 1 AS x FROM users WHERE name = ?")
+            .bind("alice")
+            .fetch_optional(pool)
+            .await
+            .unwrap()
+            .is_some();
+        if !has_alice {
+            sqlx::query("INSERT INTO users (name, version) VALUES (?, ?)")
+                .bind("alice")
+                .bind(1i64)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
         sqlx::query("INSERT INTO users (name, version) VALUES (?, ?)")
             .bind("bob")
             .bind(1i64)
-            .execute(s.pool())
+            .execute(pool)
             .await
             .unwrap();
-        let n = DbSuite::count_rows(s.pool(), "users").await;
+        let n = DbSuite::count_rows(pool, "users").await;
         assert_eq!(n, 2, "alice then bob");
     });
 }
 
-fn test_bump_alice_version(s: &mut DbSuite) {
+fn case_bump_alice_version(s: &mut DbSuite) {
     s.block_on(async {
+        let pool = s.pool();
+        let has_alice = sqlx::query("SELECT 1 AS x FROM users WHERE name = ?")
+            .bind("alice")
+            .fetch_optional(pool)
+            .await
+            .unwrap()
+            .is_some();
+        if !has_alice {
+            sqlx::query("INSERT INTO users (name, version) VALUES (?, ?)")
+                .bind("alice")
+                .bind(1i64)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
         sqlx::query("UPDATE users SET version = ? WHERE name = ?")
             .bind(2i64)
             .bind("alice")
-            .execute(s.pool())
+            .execute(pool)
             .await
             .unwrap();
         let row = sqlx::query("SELECT version FROM users WHERE name = ?")
             .bind("alice")
-            .fetch_one(s.pool())
+            .fetch_one(pool)
             .await
             .unwrap();
         assert_eq!(row.get::<i64, _>("version"), 2);
     });
 }
 
-fn test_assert_final_counts(s: &mut DbSuite) {
+fn case_assert_final_counts(s: &mut DbSuite) {
     s.block_on(async {
-        assert_eq!(DbSuite::count_rows(s.pool(), "users").await, 2);
-        let logs = DbSuite::count_rows(s.pool(), "op_log").await;
+        let pool = s.pool();
+        let u = DbSuite::count_rows(pool, "users").await;
+        if u < 2 {
+            sqlx::query("INSERT INTO users (name, version) VALUES (?, ?)")
+                .bind("alice")
+                .bind(1i64)
+                .execute(pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO users (name, version) VALUES (?, ?)")
+                .bind("bob")
+                .bind(1i64)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+        assert_eq!(DbSuite::count_rows(pool, "users").await, 2);
+        let logs = DbSuite::count_rows(pool, "op_log").await;
         assert!(logs >= 1, "at least setup + hooks + cases");
     });
 }
@@ -148,10 +194,10 @@ static DB_SUITE_HOOKS: HookFns<DbSuite> = HookFns {
 
 static DB_SUITE_CASES: &[Case<DbSuite>] = cases_fn![
     DbSuite =>
-    test_insert_alice => test_insert_alice,
-    test_insert_bob => test_insert_bob,
-    test_bump_alice_version => test_bump_alice_version,
-    test_assert_final_counts => test_assert_final_counts,
+    test_insert_alice => case_insert_alice,
+    test_insert_bob => case_insert_bob,
+    test_bump_alice_version => case_bump_alice_version,
+    test_assert_final_counts => case_assert_final_counts,
 ];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,4 +1,7 @@
-use suitcase::{cases_fn, run, suite_methods, HookFns, RunConfig};
+use suitcase::{
+    Case, HookFns, RunConfig, cargo_case_tests, cargo_case_tests_with_hooks, cases_fn, run,
+    suite_methods,
+};
 
 #[derive(Default)]
 struct Recorder {
@@ -50,6 +53,8 @@ static RECORDER_HOOKS: HookFns<Recorder> = HookFns {
     after_each: Some(rec_after),
 };
 
+static RECORDER_CASES: &[Case<Recorder>] = suite_methods![Recorder, s => test_a, test_b];
+
 #[derive(Default)]
 struct DefaultsOnly {
     n: i32,
@@ -61,12 +66,43 @@ impl DefaultsOnly {
     }
 }
 
+static DEFAULTS_CASES: &[Case<DefaultsOnly>] = suite_methods![DefaultsOnly, s => test_one];
+
+cargo_case_tests!(DefaultsOnly::default(), DEFAULTS_CASES, [test_one]);
+
+cargo_case_tests_with_hooks!(
+    Recorder::default(),
+    RECORDER_CASES,
+    RECORDER_HOOKS,
+    [test_a, test_b]
+);
+
+fn case_fn_a(s: &mut Recorder) {
+    s.push("a");
+}
+fn case_fn_b(s: &mut Recorder) {
+    s.push("b");
+}
+
+static RECORDER_FN_CASES: &[Case<Recorder>] = cases_fn![
+    Recorder =>
+    suite_cf_a => case_fn_a,
+    suite_cf_b => case_fn_b
+];
+
+cargo_case_tests_with_hooks!(
+    Recorder::default(),
+    RECORDER_FN_CASES,
+    RECORDER_HOOKS,
+    [suite_cf_a, suite_cf_b]
+);
+
 #[test]
 fn default_hooks_run_cases_only() {
     let mut suite = DefaultsOnly::default();
     run(
         &mut suite,
-        suite_methods![DefaultsOnly, s => test_one],
+        DEFAULTS_CASES,
         RunConfig::all(),
         &HookFns::default(),
     );
@@ -122,16 +158,10 @@ fn singular_filtered_case_runs_setup_and_teardown() {
 
 #[test]
 fn cases_fn_macro_works() {
-    fn a(s: &mut Recorder) {
-        s.push("a");
-    }
-    fn b(s: &mut Recorder) {
-        s.push("b");
-    }
     let mut suite = Recorder::default();
     run(
         &mut suite,
-        cases_fn![Recorder => a => a, b => b],
+        RECORDER_FN_CASES,
         RunConfig::all(),
         &RECORDER_HOOKS,
     );

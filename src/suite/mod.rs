@@ -1,11 +1,3 @@
-//! Suite runner: lifecycle hooks, case lists, and [`run`].
-//!
-//! Add test-side helpers alongside this module as the library grows.
-
-/// Hooks as optional function pointers. Pass [`Some`] with a `fn(&mut S)` to run a hook, or
-/// [`None`] to skip it (no-op for that slot).
-///
-/// [`Default`] is all [`None`] — nothing runs except your case bodies.
 #[derive(Clone, Copy, Debug)]
 pub struct HookFns<S> {
     pub setup_suite: Option<fn(&mut S)>,
@@ -26,14 +18,11 @@ impl<S> Default for HookFns<S> {
 }
 
 impl<S> HookFns<S> {
-    /// Alias for [`Default::default`] — every hook is [`None`].
     pub fn noop() -> Self {
         Self::default()
     }
 }
 
-/// One named case in a suite. Holds a plain function pointer so cases can live in `static`
-/// slices (non-capturing closures coerce to `fn(&mut S)`).
 pub struct Case<S> {
     pub name: &'static str,
     pub run: fn(&mut S),
@@ -45,28 +34,22 @@ impl<S> Case<S> {
     }
 }
 
-/// Configuration for [`run`], mainly case filtering (singular / subset runs).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RunConfig {
-    /// When `Some`, only cases whose [`Case::name`] matches **exactly** are run.
     pub filter: Option<String>,
 }
 
 impl RunConfig {
-    /// Run every case in the slice (subject to the “no matching cases” rule in [`run`]).
     pub fn all() -> Self {
         Self::default()
     }
 
-    /// Run a single case (or any case whose name equals `name`).
     pub fn filter(name: impl Into<String>) -> Self {
         Self {
             filter: Some(name.into()),
         }
     }
 
-    /// Reads [`RunConfig::filter`] from the environment variable `SUITCASE_FILTER`.
-    /// Empty or unset means no filter (run all cases).
     pub fn from_env() -> Self {
         Self {
             filter: std::env::var("SUITCASE_FILTER")
@@ -76,15 +59,6 @@ impl RunConfig {
     }
 }
 
-/// Runs `cases` on `suite` with this hook order:
-///
-/// 1. Determine the selected cases from `config.filter` (exact name match).
-/// 2. If that set is **empty**, return immediately **without** calling any hook.
-/// 3. Otherwise: `hooks.setup_suite` if [`Some`], then for each selected case:
-///    `hooks.before_each` if [`Some`] → case body → `hooks.after_each` if [`Some`]
-///    (`after_each` runs even if the case panics), then `hooks.teardown_suite` if [`Some`] once at the end.
-///
-/// Panics in a case are propagated after `after_each` runs.
 pub fn run<S>(suite: &mut S, cases: &[Case<S>], config: RunConfig, hooks: &HookFns<S>) {
     run_hooks(
         suite,
@@ -163,28 +137,6 @@ fn run_hooks<S, FS, FT, FB, FA>(
     }
 }
 
-/// Build `&'static [Case<S>]` from inherent **`test_*`** methods on `S`.
-///
-/// Each identifier must name a method `fn test_…(&mut self)` on `S`. The case name is the full
-/// method name (e.g. `"test_foo"`).
-///
-/// ```
-/// use suitcase::{suite_methods, Case, HookFns, RunConfig, run};
-///
-/// struct MySuite {
-///     x: i32,
-/// }
-///
-/// impl MySuite {
-///     fn test_a(&mut self) {
-///         self.x = 1;
-///     }
-/// }
-///
-/// let _cases = suite_methods![MySuite, s => test_a];
-/// # let mut suite = MySuite { x: 0 };
-/// # run(&mut suite, _cases, RunConfig::all(), &HookFns::default());
-/// ```
 #[macro_export]
 macro_rules! suite_methods {
     ($ty:ty, $s:ident => $($name:ident),* $(,)?) => {
@@ -192,27 +144,6 @@ macro_rules! suite_methods {
     };
 }
 
-/// Build a `&'static [Case<S>]` from case names and inline blocks.
-///
-/// The suite type and parameter name are written once: `cases![MySuite, s => …]`. Use that
-/// identifier in each `=> { … }` body. Closures coerce to function pointers when they capture
-/// nothing from the environment.
-///
-/// ```
-/// use suitcase::{cases, Case, HookFns, RunConfig, run};
-///
-/// #[derive(Default)]
-/// struct MySuite {
-///     field: i32,
-/// }
-///
-/// let _cases = cases![MySuite, s =>
-///     first => { s.field = 1; },
-///     second => { assert_eq!(s.field, 1); },
-/// ];
-/// # let mut suite = MySuite::default();
-/// # run(&mut suite, _cases, RunConfig::all(), &HookFns::default());
-/// ```
 #[macro_export]
 macro_rules! cases {
     ($ty:ty, $s:ident => $($name:ident => $body:block),* $(,)?) => {
@@ -220,27 +151,6 @@ macro_rules! cases {
     };
 }
 
-/// Build a `&'static [Case<S>]` from case names and plain function pointers (no captures).
-///
-/// ```
-/// use suitcase::{cases_fn, Case, HookFns, RunConfig, run};
-///
-/// #[derive(Default)]
-/// struct MySuite {
-///     field: i32,
-/// }
-///
-/// fn first(s: &mut MySuite) {
-///     s.field = 1;
-/// }
-/// fn second(s: &mut MySuite) {
-///     assert_eq!(s.field, 1);
-/// }
-///
-/// let _cases = cases_fn![MySuite => first => first, second => second];
-/// # let mut suite = MySuite::default();
-/// # run(&mut suite, _cases, RunConfig::all(), &HookFns::default());
-/// ```
 #[macro_export]
 macro_rules! cases_fn {
     ($ty:ty => $($name:ident => $fn:path),* $(,)?) => {
@@ -248,25 +158,6 @@ macro_rules! cases_fn {
     };
 }
 
-/// Emit one `#[test]` per case name, each calling [`run`] with [`RunConfig::filter`] set to that
-/// case’s name (so it shows up separately in `cargo test` output). Uses [`HookFns::default`]
-/// (no hooks).
-///
-/// Pass the same `cases` slice you use for a full [`run`] with [`RunConfig::all`]. Each case body
-/// must behave correctly when it is the **only** case selected (after any `setup_suite` /
-/// `before_each` you pass in other tests). If a case depends on earlier mutations, encode that in
-/// the body (for example by branching on `s.value`) or keep a separate sequential `#[test]` that
-/// runs all cases.
-///
-/// This macro expands to several `#[test]` functions at the **crate root** of the test module, so
-/// it cannot be demonstrated as a single `rustdoc` snippet. Use it in `tests/*.rs` next to your
-/// suite (see the `tests/basic.rs` integration test in this repository).
-///
-/// ```text
-/// static MY_CASES: &[Case<MySuite>] = suite_methods![MySuite, s => test_a, test_b];
-///
-/// cargo_case_tests!(MySuite::default(), MY_CASES, [test_a, test_b]);
-/// ```
 #[macro_export]
 macro_rules! cargo_case_tests {
     ($suite:expr, $cases:expr, [$($name:ident),* $(,)?] $(,)?) => {
@@ -285,7 +176,6 @@ macro_rules! cargo_case_tests {
     };
 }
 
-/// Like [`cargo_case_tests!`], but passes a shared [`HookFns`] (e.g. with [`Some`] hook functions).
 #[macro_export]
 macro_rules! cargo_case_tests_with_hooks {
     ($suite:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?) => {
