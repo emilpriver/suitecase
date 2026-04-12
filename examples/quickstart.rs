@@ -1,10 +1,16 @@
 //! Mirrors the README **Quickstart** section.
 //!
-//! Run: `cargo test --example quickstart`
+//! Run: `cargo test --example quickstart` — two `#[test]` lines from [`test_suite!`], sharing one
+//! suite. [`main`] uses [`RunConfig::all`] so `cargo run --example quickstart` runs every case in
+//! order on one suite.
+//!
+//! The second generated test assumes the first has already run on the shared suite; with the
+//! default parallel harness that order is not guaranteed. If `test_inc_verify` fails, run:
+//! `cargo test --example quickstart -- --test-threads=1`.
 
 #![allow(dead_code)]
 
-use suitecase::{cargo_case_tests_with_hooks, suite_methods, Case, HookFns};
+use suitecase::{Case, HookFns, RunConfig, cases, run, test_suite};
 
 #[derive(Default)]
 struct Counter {
@@ -15,9 +21,19 @@ impl Counter {
     fn test_inc(&mut self) {
         self.n += 1;
     }
+
+    fn test_inc_verify(&mut self) {
+        assert_eq!(
+            self.n, 1,
+            "test_inc should have run first on the same suite"
+        );
+    }
 }
 
-static MY_CASES: &[Case<Counter>] = suite_methods![Counter, s => test_inc];
+static MY_CASES: &[Case<Counter>] = cases![Counter, s =>
+    test_inc => { s.test_inc(); },
+    test_inc_verify => { s.test_inc_verify(); },
+];
 
 static MY_HOOKS: HookFns<Counter> = HookFns {
     setup_suite: None,
@@ -26,6 +42,20 @@ static MY_HOOKS: HookFns<Counter> = HookFns {
     after_each: None,
 };
 
-cargo_case_tests_with_hooks!(Counter::default(), MY_CASES, MY_HOOKS, [test_inc]);
+test_suite!(
+    Counter,
+    MY_SHARED_SUITE,
+    Counter::default(),
+    MY_CASES,
+    MY_HOOKS,
+    [test_inc, test_inc_verify]
+);
 
-fn main() {}
+fn quickstart_body() {
+    let mut suite = Counter::default();
+    run(&mut suite, MY_CASES, RunConfig::all(), &MY_HOOKS);
+}
+
+fn main() {
+    quickstart_body();
+}

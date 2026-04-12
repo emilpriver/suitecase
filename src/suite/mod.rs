@@ -11,7 +11,7 @@
 //!
 //! - [`RunConfig::filter`] **None** → all cases in the slice are selected (in slice order).
 //! - [`RunConfig::filter`] **Some(name)** → only the case whose [`Case::name`] equals `name`
-//!   (string comparison; the case-building macros use `stringify!` for names).
+//!   (string comparison; the [`cases!`] macro uses `stringify!` for names).
 //!
 //! If the selected set is **empty**:
 //! - and `filter` is **Some** → [`run`] **panics** (`"matched no cases"`).
@@ -181,50 +181,6 @@ fn run_hooks<S, FS, FT, FB, FA>(
     }
 }
 
-/// Build a `&'static [Case<S>]` from inherent **`test_*`** method names.
-///
-/// # Declaration
-///
-/// ```text
-/// suite_methods! {
-///     $ty:ty, $s:ident => $($name:ident),* $(,)?
-/// }
-/// ```
-///
-/// # Description
-///
-/// For each `$name`, expands to a [`Case`] whose name is `stringify!(name)` (e.g. `"test_foo"`)
-/// and whose body calls `$s.$name()` on the suite reference. Every listed identifier must be an
-/// inherent method `fn $name(&mut self)` on `$ty`.
-///
-/// # Example
-///
-/// ```
-/// use suitecase::{run, suite_methods, Case, HookFns, RunConfig};
-///
-/// #[derive(Default)]
-/// struct MySuite {
-///     x: i32,
-/// }
-///
-/// impl MySuite {
-///     fn test_hello(&mut self) {
-///         self.x = 1;
-///     }
-/// }
-///
-/// let cases: &[Case<MySuite>] = suite_methods![MySuite, s => test_hello];
-/// let mut suite = MySuite::default();
-/// run(&mut suite, cases, RunConfig::filter("test_hello"), &HookFns::default());
-/// assert_eq!(suite.x, 1);
-/// ```
-#[macro_export]
-macro_rules! suite_methods {
-    ($ty:ty, $s:ident => $($name:ident),* $(,)?) => {
-        &[$( $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| { $s.$name(); })),*]
-    };
-}
-
 /// Build a `&'static [Case<S>]` from case names and inline blocks.
 ///
 /// # Declaration
@@ -264,138 +220,36 @@ macro_rules! cases {
     };
 }
 
-/// Build a `&'static [Case<S>]` from case names and plain function pointers.
+/// Emit one `#[test]` per listed case name. Each test locks a **shared** suite behind a
+/// [`std::sync::Mutex`] in a [`std::sync::OnceLock`] keyed by `$storage`, then calls [`run`] with
+/// [`RunConfig::filter`] and your [`HookFns`].
+///
+/// `$ty` must be [`Send`]. The harness may run tests in any order or in parallel; if one case
+/// depends on another having run first on the same suite, see the macro docs on ordering, or call
+/// [`run`] once with [`RunConfig::all`] instead.
 ///
 /// # Declaration
 ///
 /// ```text
-/// cases_fn! {
-///     $ty:ty => $($name:ident => $fn:path),* $(,)?
+/// test_suite! {
+///     $ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?
 /// }
-/// ```
-///
-/// # Description
-///
-/// Each `$name` becomes the [`Case::name`]. `$fn` must be a path to `fn(&mut $ty)` (no captures).
-///
-/// # Example
-///
-/// ```
-/// use suitecase::{cases_fn, run, Case, HookFns, RunConfig};
-///
-/// #[derive(Default)]
-/// struct MySuite {
-///     n: i32,
-/// }
-///
-/// fn set_one(s: &mut MySuite) {
-///     s.n = 1;
-/// }
-///
-/// let cases: &[Case<MySuite>] = cases_fn![MySuite => first => set_one];
-/// let mut suite = MySuite::default();
-/// run(&mut suite, cases, RunConfig::filter("first"), &HookFns::default());
-/// assert_eq!(suite.n, 1);
 /// ```
 #[macro_export]
-macro_rules! cases_fn {
-    ($ty:ty => $($name:ident => $fn:path),* $(,)?) => {
-        &[$( $crate::suite::Case::<$ty>::new(stringify!($name), $fn as fn(&mut $ty))),*]
-    };
-}
+macro_rules! test_suite {
+    ($ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?) => {
+        static $storage: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
+            ::std::sync::OnceLock::new();
 
-/// Emit one `#[test]` function per listed identifier, each calling [`run`] with
-/// [`RunConfig::filter`] set to that name and [`HookFns::default`].
-///
-/// # Declaration
-///
-/// ```text
-/// cargo_case_tests! {
-///     $suite:expr, $cases:expr, [$($name:ident),* $(,)?] $(,)?
-/// }
-/// ```
-///
-/// # Description
-///
-/// Expands at the **call site** (usually `tests/*.rs`). Each generated test constructs `suite`
-/// from `$suite`, then runs only the matching case. Use this when you want each case to appear as
-/// its own line in `cargo test` output.
-///
-/// Case bodies should behave correctly when they are the **only** case selected (fresh state or
-/// self-contained setup inside the body).
-///
-/// # Example
-///
-/// Place the invocation in an integration test crate root (not inside a function):
-///
-/// ```text
-/// use suitecase::{cargo_case_tests, suite_methods, Case, HookFns};
-///
-/// #[derive(Default)]
-/// struct S { /* … */ }
-/// impl S { fn test_x(&mut self) { } }
-///
-/// static C: &[Case<S>] = suite_methods![S, s => test_x];
-///
-/// cargo_case_tests!(S::default(), C, [test_x]);
-/// ```
-#[macro_export]
-macro_rules! cargo_case_tests {
-    ($suite:expr, $cases:expr, [$($name:ident),* $(,)?] $(,)?) => {
         $(
             #[test]
             fn $name() {
-                let mut suite = $suite;
+                let mut suite = $storage
+                    .get_or_init(|| ::std::sync::Mutex::new($init))
+                    .lock()
+                    .expect("suitecase: shared suite mutex poisoned");
                 $crate::suite::run(
-                    &mut suite,
-                    $cases,
-                    $crate::suite::RunConfig::filter(stringify!($name)),
-                    &$crate::suite::HookFns::default(),
-                );
-            }
-        )*
-    };
-}
-
-/// Like [`cargo_case_tests!`], but passes a shared [`HookFns`] value (e.g. with [`Some`] hooks).
-///
-/// # Declaration
-///
-/// ```text
-/// cargo_case_tests_with_hooks! {
-///     $suite:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?
-/// }
-/// ```
-///
-/// # Description
-///
-/// Same as [`cargo_case_tests!`], except each test uses `&$hooks` instead of default hook fns.
-///
-/// # Example
-///
-/// ```text
-/// use suitecase::{cargo_case_tests_with_hooks, suite_methods, Case, HookFns};
-///
-/// fn setup(s: &mut MySuite) { /* … */ }
-///
-/// static HOOKS: HookFns<MySuite> = HookFns {
-///     setup_suite: Some(setup),
-///     teardown_suite: None,
-///     before_each: None,
-///     after_each: None,
-/// };
-///
-/// cargo_case_tests_with_hooks!(MySuite::default(), MY_CASES, HOOKS, [test_a, test_b]);
-/// ```
-#[macro_export]
-macro_rules! cargo_case_tests_with_hooks {
-    ($suite:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?) => {
-        $(
-            #[test]
-            fn $name() {
-                let mut suite = $suite;
-                $crate::suite::run(
-                    &mut suite,
+                    &mut *suite,
                     $cases,
                     $crate::suite::RunConfig::filter(stringify!($name)),
                     &$hooks,
@@ -404,3 +258,12 @@ macro_rules! cargo_case_tests_with_hooks {
         )*
     };
 }
+
+#[cfg(test)]
+mod suite_test;
+
+#[cfg(test)]
+mod shared_state_test;
+
+#[cfg(test)]
+mod cargo_filter_output_test;

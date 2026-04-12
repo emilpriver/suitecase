@@ -1,7 +1,6 @@
-use suitecase::{
-    Case, HookFns, RunConfig, cargo_case_tests, cargo_case_tests_with_hooks, cases_fn, run,
-    suite_methods,
-};
+use core::panic;
+
+use crate::{Case, HookFns, RunConfig, run};
 
 #[derive(Default)]
 struct Recorder {
@@ -53,7 +52,10 @@ static RECORDER_HOOKS: HookFns<Recorder> = HookFns {
     after_each: Some(rec_after),
 };
 
-static RECORDER_CASES: &[Case<Recorder>] = suite_methods![Recorder, s => test_a, test_b];
+static RECORDER_CASES: &[Case<Recorder>] = cases![Recorder, s =>
+    test_a => { s.test_a(); },
+    test_b => { s.test_b(); },
+];
 
 #[derive(Default)]
 struct DefaultsOnly {
@@ -66,15 +68,63 @@ impl DefaultsOnly {
     }
 }
 
-static DEFAULTS_CASES: &[Case<DefaultsOnly>] = suite_methods![DefaultsOnly, s => test_one];
+static DEFAULTS_CASES: &[Case<DefaultsOnly>] = cases![DefaultsOnly, s =>
+    test_one => { s.test_one(); },
+];
 
-cargo_case_tests!(DefaultsOnly::default(), DEFAULTS_CASES, [test_one]);
+static DEFAULTS_HOOKS: HookFns<DefaultsOnly> = HookFns {
+    setup_suite: None,
+    teardown_suite: None,
+    before_each: None,
+    after_each: None,
+};
 
-cargo_case_tests_with_hooks!(
+test_suite!(
+    DefaultsOnly,
+    DEFAULTS_SUITE,
+    DefaultsOnly::default(),
+    DEFAULTS_CASES,
+    DEFAULTS_HOOKS,
+    [test_one]
+);
+
+test_suite!(
+    Recorder,
+    REC_SUITE,
     Recorder::default(),
     RECORDER_CASES,
     RECORDER_HOOKS,
     [test_a, test_b]
+);
+
+/// One generated test; exercises `test_suite!` (shared `Mutex` suite path).
+#[derive(Default)]
+struct SharedSmoke(u8);
+
+impl SharedSmoke {
+    fn test_shared_smoke(&mut self) {
+        self.0 = 1;
+    }
+}
+
+static SHARED_SMOKE_CASES: &[Case<SharedSmoke>] = cases![SharedSmoke, s =>
+    test_shared_smoke => { s.test_shared_smoke(); },
+];
+
+static SHARED_SMOKE_HOOKS: HookFns<SharedSmoke> = HookFns {
+    setup_suite: None,
+    teardown_suite: None,
+    before_each: None,
+    after_each: None,
+};
+
+test_suite!(
+    SharedSmoke,
+    SHARED_SMOKE_SUITE,
+    SharedSmoke::default(),
+    SHARED_SMOKE_CASES,
+    SHARED_SMOKE_HOOKS,
+    [test_shared_smoke]
 );
 
 fn case_fn_a(s: &mut Recorder) {
@@ -84,13 +134,14 @@ fn case_fn_b(s: &mut Recorder) {
     s.push("b");
 }
 
-static RECORDER_FN_CASES: &[Case<Recorder>] = cases_fn![
-    Recorder =>
-    suite_cf_a => case_fn_a,
-    suite_cf_b => case_fn_b
+static RECORDER_FN_CASES: &[Case<Recorder>] = cases![Recorder, s =>
+    suite_cf_a => { case_fn_a(s); },
+    suite_cf_b => { case_fn_b(s); },
 ];
 
-cargo_case_tests_with_hooks!(
+test_suite!(
+    Recorder,
+    REC_FN_SUITE,
     Recorder::default(),
     RECORDER_FN_CASES,
     RECORDER_HOOKS,
@@ -114,7 +165,7 @@ fn hook_order_all_cases() {
     let mut suite = Recorder::default();
     run(
         &mut suite,
-        suite_methods![Recorder, s => test_a, test_b],
+        RECORDER_CASES,
         RunConfig::all(),
         &RECORDER_HOOKS,
     );
@@ -139,7 +190,7 @@ fn singular_filtered_case_runs_setup_and_teardown() {
     let mut suite = Recorder::default();
     run(
         &mut suite,
-        suite_methods![Recorder, s => test_a, test_b],
+        RECORDER_CASES,
         RunConfig::filter("test_b"),
         &RECORDER_HOOKS,
     );
@@ -157,7 +208,7 @@ fn singular_filtered_case_runs_setup_and_teardown() {
 }
 
 #[test]
-fn cases_fn_macro_works() {
+fn cases_inline_free_functions() {
     let mut suite = Recorder::default();
     run(
         &mut suite,
@@ -191,9 +242,12 @@ fn no_cases_no_setup() {
 #[should_panic(expected = "matched no cases")]
 fn invalid_filter_panics() {
     let mut suite = Recorder::default();
+    static ONLY_CASE: &[Case<Recorder>] = cases![Recorder, s =>
+        test_only => { s.test_only(); },
+    ];
     run(
         &mut suite,
-        suite_methods![Recorder, s => test_only],
+        ONLY_CASE,
         RunConfig::filter("nope"),
         &RECORDER_HOOKS,
     );
@@ -202,13 +256,11 @@ fn invalid_filter_panics() {
 #[test]
 fn after_each_runs_when_case_panics() {
     let mut suite = Recorder::default();
+    static BAD_CASE: &[Case<Recorder>] = cases![Recorder, s =>
+        test_bad => { s.test_bad(); },
+    ];
     let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run(
-            &mut suite,
-            suite_methods![Recorder, s => test_bad],
-            RunConfig::all(),
-            &RECORDER_HOOKS,
-        );
+        run(&mut suite, BAD_CASE, RunConfig::all(), &RECORDER_HOOKS);
     }));
     assert!(err.is_err());
     assert_eq!(
@@ -220,9 +272,12 @@ fn after_each_runs_when_case_panics() {
 #[test]
 fn partial_hooks_only_run_some() {
     let mut suite = Recorder::default();
+    static ONE_CASE: &[Case<Recorder>] = cases![Recorder, s =>
+        test_a => { s.test_a(); },
+    ];
     run(
         &mut suite,
-        suite_methods![Recorder, s => test_a],
+        ONE_CASE,
         RunConfig::all(),
         &HookFns {
             setup_suite: Some(rec_setup),
