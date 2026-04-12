@@ -261,3 +261,6 @@ macro_rules! test_suite {
 
 #[cfg(test)]
 mod suite_test;
+
+#[cfg(test)]
+mod shared_state_test;

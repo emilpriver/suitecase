@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-use suitecase::{cases, Case, HookFns, RunConfig, run};
+use suitecase::{Case, HookFns, RunConfig, cases, run};
 
 #[derive(Default)]
 struct Counter {
@@ -21,8 +21,7 @@ impl Counter {
 
     fn test_inc_verify(&mut self) {
         assert_eq!(
-            self.n,
-            1,
+            self.n, 1,
             "test_inc should have run first on the same suite"
         );
     }
