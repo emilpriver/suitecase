@@ -4,7 +4,7 @@
 
 **Heavy development:** The API is still evolving. Expect **breaking changes** between releases until a stable 1.0; pin an exact version (or git revision) in `Cargo.toml` if you need upgrades to be predictable.
 
-**Install · [Usage](#usage) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
+**Install · [Usage](#usage) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [AI-assisted changes](AI_USAGE.md) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
 
 ---
 
@@ -160,6 +160,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 ## More documentation
 
+- **[`AI_USAGE.md`](AI_USAGE.md)** — using LLMs to draft changes is allowed; you must understand the patch, justify it in review, and avoid unnecessary complexity (see file).
 - **`cargo doc --open`** — [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html) and [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) include declaration / description / examples.
 - Crate root and [`suite`](https://docs.rs/suitecase/latest/suitecase/suite/index.html) describe how [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html) selects cases and orders hooks.
 - [`assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) — panicking assertion helpers (submodules per domain; flat re-exports at the module root).
