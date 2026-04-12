@@ -5,7 +5,7 @@
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
 use std::future::Future;
-use suitecase::{Case, HookFns, cases, test_suite};
+use suitecase::{HookFns, test_suite};
 use tokio::runtime::{Handle, Runtime};
 
 struct DbSuite {
@@ -206,25 +206,17 @@ static MY_HOOKS: HookFns<DbSuite> = HookFns {
     after_each: Some(db_after_each),
 };
 
-static MY_CASES: &[Case<DbSuite>] = cases![DbSuite, s =>
+test_suite!(
+    DbSuite,
+    DB_SQLX_SUITE,
+    MY_CASES,
+    DbSuite::default(),
+    MY_HOOKS,
+    s =>
     test_insert_alice => { case_insert_alice(s); },
     test_insert_bob => { case_insert_bob(s); },
     test_bump_alice_version => { case_bump_alice_version(s); },
     test_assert_final_counts => { case_assert_final_counts(s); },
-];
-
-test_suite!(
-    DbSuite,
-    DB_SQLX_SUITE,
-    DbSuite::default(),
-    MY_CASES,
-    MY_HOOKS,
-    [
-        test_insert_alice,
-        test_insert_bob,
-        test_bump_alice_version,
-        test_assert_final_counts
-    ]
 );
 
 fn main() {}

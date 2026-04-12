@@ -68,10 +68,6 @@ impl DefaultsOnly {
     }
 }
 
-static DEFAULTS_CASES: &[Case<DefaultsOnly>] = cases![DefaultsOnly, s =>
-    test_one => { s.test_one(); },
-];
-
 static DEFAULTS_HOOKS: HookFns<DefaultsOnly> = HookFns {
     setup_suite: None,
     teardown_suite: None,
@@ -82,10 +78,11 @@ static DEFAULTS_HOOKS: HookFns<DefaultsOnly> = HookFns {
 test_suite!(
     DefaultsOnly,
     DEFAULTS_SUITE,
-    DefaultsOnly::default(),
     DEFAULTS_CASES,
+    DefaultsOnly::default(),
     DEFAULTS_HOOKS,
-    [test_one]
+    s =>
+    test_one => { s.test_one(); },
 );
 
 test_suite!(

@@ -230,9 +230,22 @@ macro_rules! cases {
 ///
 /// # Declaration
 ///
+/// **Split cases and names** — pass a [`cases!`] slice (or any `&[Case<S>]`) plus a matching list of
+/// identifiers for the generated `#[test]` functions:
+///
 /// ```text
 /// test_suite! {
 ///     $ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?
+/// }
+/// ```
+///
+/// **Inline cases** — same syntax as [`cases!`], written once; the macro defines `$cases_static`
+/// and emits one `#[test] fn $name` per case:
+///
+/// ```text
+/// test_suite! {
+///     $ty:ty, $storage:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
+///         $($name:ident => $body:block),* $(,)?
 /// }
 /// ```
 #[macro_export]
@@ -251,6 +264,33 @@ macro_rules! test_suite {
                 $crate::suite::run(
                     &mut *suite,
                     $cases,
+                    $crate::suite::RunConfig::filter(stringify!($name)),
+                    &$hooks,
+                );
+            }
+        )*
+    };
+
+    ($ty:ty, $storage:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
+        $($name:ident => $body:block),* $(,)?
+    ) => {
+        static $cases_static: &'static [$crate::suite::Case<$ty>] = &[$(
+            $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| $body)
+        ),*];
+
+        static $storage: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
+            ::std::sync::OnceLock::new();
+
+        $(
+            #[test]
+            fn $name() {
+                let mut suite = $storage
+                    .get_or_init(|| ::std::sync::Mutex::new($init))
+                    .lock()
+                    .expect("suitecase: shared suite mutex poisoned");
+                $crate::suite::run(
+                    &mut *suite,
+                    $cases_static,
                     $crate::suite::RunConfig::filter(stringify!($name)),
                     &$hooks,
                 );
