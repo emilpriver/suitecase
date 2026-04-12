@@ -1,4 +1,4 @@
-use suitcase::{
+use suitecase::{
     Case, HookFns, RunConfig, cargo_case_tests, cargo_case_tests_with_hooks, cases_fn, run,
     suite_methods,
 };

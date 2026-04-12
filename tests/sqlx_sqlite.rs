@@ -1,7 +1,7 @@
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
 use std::future::Future;
-use suitcase::{Case, HookFns, RunConfig, cargo_case_tests_with_hooks, cases_fn, run};
+use suitecase::{Case, HookFns, RunConfig, cargo_case_tests_with_hooks, cases_fn, run};
 use tokio::runtime::{Handle, Runtime};
 
 struct DbSuite {
