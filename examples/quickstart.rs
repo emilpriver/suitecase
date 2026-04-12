@@ -10,7 +10,7 @@
 
 #![allow(dead_code)]
 
-use suitecase::{cases, run, test_suite, Case, HookFns, RunConfig};
+use suitecase::{Case, HookFns, RunConfig, cases, run, test_suite};
 
 #[derive(Default)]
 struct Counter {
