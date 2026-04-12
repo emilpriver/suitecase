@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.5 — 2026-04-12
+
+### Added
+
+* New [`suitecase::mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) module: [testify/mock](https://pkg.go.dev/github.com/stretchr/testify/mock)-style **expectations** and **call recording** on a thread-safe [`Mock`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html), with [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html), matchers (`eq`, `anything`, `matched_by`, …), and [`TestingT`](https://docs.rs/suitecase/latest/suitecase/mock/trait.TestingT.html) for verification.  #11
+* [`examples/mock.rs`](examples/mock.rs) showing how to wire a mock into tests.
+
+### Changed
+
+* README: **Mocking** section and table-of-contents link; **AI-assisted changes** points to [`AI_USAGE.md`](AI_USAGE.md), which documents expectations for AI-assisted contributions.
+
 ## 0.0.4 — 2026-04-12
 
 ### Added
