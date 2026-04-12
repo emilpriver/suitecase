@@ -1,7 +1,7 @@
 use sqlx::Row;
 use sqlx::sqlite::SqlitePool;
 use std::future::Future;
-use suitcase::{Case, HookFns, RunConfig, cargo_case_tests_with_hooks, cases_fn, run};
+use suitcase::{Case, HookFns, RunConfig, cases_fn, run};
 use tokio::runtime::{Handle, Runtime};
 
 struct DbSuite {
@@ -141,7 +141,7 @@ fn db_setup_suite(s: &mut DbSuite) {
             .await
             .expect("sqlite connect");
 
-        sqlx::migrate!("tests/sqlx_sqlite_migrations")
+        sqlx::migrate!("examples/sqlx_sqlite_migrations")
             .run(&pool)
             .await
             .expect("apply migrations");
@@ -200,25 +200,7 @@ static DB_SUITE_CASES: &[Case<DbSuite>] = cases_fn![
     test_assert_final_counts => case_assert_final_counts,
 ];
 
-fn db_suite_for_test() -> DbSuite {
-    let rt: &'static Runtime = Box::leak(Box::new(Runtime::new().expect("runtime")));
-    DbSuite::new(rt.handle().clone())
-}
-
-cargo_case_tests_with_hooks!(
-    db_suite_for_test(),
-    DB_SUITE_CASES,
-    DB_SUITE_HOOKS,
-    [
-        test_insert_alice,
-        test_insert_bob,
-        test_bump_alice_version,
-        test_assert_final_counts
-    ]
-);
-
-#[test]
-fn sqlx_sqlite_suite_mutates_db_between_cases() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = Runtime::new()?;
 
     let mut suite = DbSuite::new(rt.handle().clone());
