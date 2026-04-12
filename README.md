@@ -4,6 +4,8 @@ The library package name is **`suitcase`** — use `suitcase = "0.1"` in `Cargo.
 
 Structured test suites for Rust: **setup** / **teardown** at suite scope and **before_each** / **after_each** around each case, with optional filtering so a single case still runs the right hooks.
 
+**Heavy development:** The API is still evolving. Expect **breaking changes** between releases until a stable 1.0; pin an exact version (or git revision) in `Cargo.toml` if you need upgrades to be predictable.
+
 **Install · [Usage](#usage) · [Examples](#examples) · [Docs](https://docs.rs/suitcase)** (after publish; `cargo doc --open` locally)
 
 ---
