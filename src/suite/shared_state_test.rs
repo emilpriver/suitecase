@@ -2,18 +2,12 @@
 //! [`std::sync::OnceLock`]: `shared_init_state` runs only the `init_state` case, then
 //! `shared_mutate_after_init` waits (without holding the mutex) until that finishes, then runs
 //! `mutate_after_init`. This stays reliable under the default **parallel** test harness.
-//!
-//! For the same wiring via the [`test_suite!`](crate::test_suite) macro, see the crate examples;
-//! run those with `cargo test -- --test-threads=1` if case order must match definition order.
-
-#![allow(unused_imports)]
-
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::{cases, Case, HookFns, RunConfig, run};
+use crate::{Case, HookFns, RunConfig, run};
 
 #[derive(Default, Debug)]
 struct SharedState {
@@ -83,11 +77,6 @@ fn shared_mutate_after_init() {
 #[test]
 fn sequential_run_matches_shared_increment() {
     let mut suite = SharedState::default();
-    run(
-        &mut suite,
-        SHARED_CASES,
-        RunConfig::all(),
-        &SHARED_HOOKS,
-    );
+    run(&mut suite, SHARED_CASES, RunConfig::all(), &SHARED_HOOKS);
     assert_eq!(suite.counter, 43);
 }
