@@ -1,12 +1,8 @@
 //! Mirrors the README **Quickstart** section.
 //!
 //! Run: `cargo test --example quickstart` — two `#[test]` lines from [`test_suite!`], sharing one
-//! suite. [`main`] uses [`RunConfig::all`] so `cargo run --example quickstart` runs every case in
-//! order on one suite.
-//!
-//! The second generated test assumes the first has already run on the shared suite; with the
-//! default parallel harness that order is not guaranteed. If `test_inc_verify` fails, run:
-//! `cargo test --example quickstart -- --test-threads=1`.
+//! suite and running in registration order. [`main`] uses [`RunConfig::all`] so
+//! `cargo run --example quickstart` runs every case in order on one suite.
 
 #![allow(dead_code)]
 
@@ -40,6 +36,7 @@ static MY_HOOKS: HookFns<Counter> = HookFns {
 test_suite!(
     Counter,
     MY_SHARED_SUITE,
+    MY_CURSOR,
     MY_CASES,
     Counter::default(),
     MY_HOOKS,

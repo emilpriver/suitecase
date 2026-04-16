@@ -78,6 +78,7 @@ static DEFAULTS_HOOKS: HookFns<DefaultsOnly> = HookFns {
 test_suite!(
     DefaultsOnly,
     DEFAULTS_SUITE,
+    DEFAULTS_CURSOR,
     DEFAULTS_CASES,
     DefaultsOnly::default(),
     DEFAULTS_HOOKS,
@@ -88,6 +89,7 @@ test_suite!(
 test_suite!(
     Recorder,
     REC_SUITE,
+    REC_CURSOR,
     Recorder::default(),
     RECORDER_CASES,
     RECORDER_HOOKS,
@@ -118,6 +120,7 @@ static SHARED_SMOKE_HOOKS: HookFns<SharedSmoke> = HookFns {
 test_suite!(
     SharedSmoke,
     SHARED_SMOKE_SUITE,
+    SHARED_SMOKE_CURSOR,
     SharedSmoke::default(),
     SHARED_SMOKE_CASES,
     SHARED_SMOKE_HOOKS,
@@ -139,6 +142,7 @@ static RECORDER_FN_CASES: &[Case<Recorder>] = cases![Recorder, s =>
 test_suite!(
     Recorder,
     REC_FN_SUITE,
+    REC_FN_CURSOR,
     Recorder::default(),
     RECORDER_FN_CASES,
     RECORDER_HOOKS,

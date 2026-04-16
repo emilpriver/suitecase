@@ -209,6 +209,7 @@ static MY_HOOKS: HookFns<DbSuite> = HookFns {
 test_suite!(
     DbSuite,
     DB_SQLX_SUITE,
+    DB_SQLX_CURSOR,
     MY_CASES,
     DbSuite::default(),
     MY_HOOKS,

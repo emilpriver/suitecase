@@ -220,58 +220,66 @@ macro_rules! cases {
     };
 }
 
-/// Emit one `#[test]` per listed case name. Each test locks a **shared** suite behind a
-/// [`std::sync::Mutex`] in a [`std::sync::OnceLock`] keyed by `$storage`, then calls [`run`] with
-/// [`RunConfig::filter`] and your [`HookFns`].
-///
-/// `$ty` must be [`Send`]. The harness may run tests in any order or in parallel; if one case
-/// depends on another having run first on the same suite, see the macro docs on ordering, or call
-/// [`run`] once with [`RunConfig::all`] instead.
+/// Emit one `#[test]` per listed case name, sharing one suite value and running in registration
+/// order.
 ///
 /// # Declaration
 ///
-/// **Split cases and names** — pass a [`cases!`] slice (or any `&[Case<S>]`) plus a matching list of
-/// identifiers for the generated `#[test]` functions:
+/// **Split cases and names** — pass a [`cases!`] slice (or any `&[Case<S>]`) plus a matching list
+/// of identifiers for the generated `#[test]` functions:
 ///
 /// ```text
 /// test_suite! {
-///     $ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?
+///     $ty:ty, $storage:ident, $cursor:ident, $init:expr, $cases:expr, $hooks:expr,
+///     [$($name:ident),* $(,)?] $(,)?
 /// }
 /// ```
 ///
-/// **Inline cases** — same syntax as [`cases!`], written once; the macro defines `$cases_static`
-/// and emits one `#[test] fn $name` per case:
+/// **Inline cases** — same syntax as [`cases!`], written once; the macro defines
+/// `$cases_static` and emits one `#[test] fn $name` per case:
 ///
 /// ```text
 /// test_suite! {
-///     $ty:ty, $storage:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
-///         $($name:ident => $body:block),* $(,)?
+///     $ty:ty, $storage:ident, $cursor:ident, $cases_static:ident, $init:expr, $hooks:expr,
+///     $s:ident => $($name:ident => $body:block),* $(,)?
 /// }
 /// ```
+///
+/// # Description
+///
+/// The macro declares a shared [`Mutex<$ty>`](std::sync::Mutex) in a [`std::sync::OnceLock`]
+/// (`$storage`) and an [`AtomicUsize`](std::sync::atomic::AtomicUsize) cursor (`$cursor`), then
+/// emits one `#[test] fn $name` per case. Each test delegates to [`run_suite_case`], which locks
+/// the suite and runs every case from the cursor up through its own in registration order via
+/// [`run`] + [`RunConfig::filter`], advancing the cursor as it goes. Tests cargo schedules later
+/// find the cursor already past their index and return.
+///
+/// If a case panics, the cursor is poisoned and later `#[test]`s panic with a message naming the
+/// case that never ran. `$ty` must be [`Send`].
 #[macro_export]
 macro_rules! test_suite {
-    ($ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?) => {
+    ($ty:ty, $storage:ident, $cursor:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?) => {
         static $storage: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
             ::std::sync::OnceLock::new();
+        static $cursor: ::std::sync::atomic::AtomicUsize =
+            ::std::sync::atomic::AtomicUsize::new(0);
 
         $(
             #[test]
             fn $name() {
-                let mut suite = $storage
-                    .get_or_init(|| ::std::sync::Mutex::new($init))
-                    .lock()
-                    .expect("suitecase: shared suite mutex poisoned");
-                $crate::suite::run(
-                    &mut *suite,
+                $crate::suite::run_suite_case(
+                    &$storage,
+                    &$cursor,
+                    || $init,
                     $cases,
-                    $crate::suite::RunConfig::filter(stringify!($name)),
+                    stringify!($name),
                     &$hooks,
                 );
             }
         )*
     };
 
-    ($ty:ty, $storage:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
+    ($ty:ty, $storage:ident, $cursor:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
         $($name:ident => $body:block),* $(,)?
     ) => {
         static $cases_static: &'static [$crate::suite::Case<$ty>] = &[$(
@@ -280,23 +288,82 @@ macro_rules! test_suite {
 
         static $storage: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
             ::std::sync::OnceLock::new();
+        static $cursor: ::std::sync::atomic::AtomicUsize =
+            ::std::sync::atomic::AtomicUsize::new(0);
 
         $(
             #[test]
             fn $name() {
-                let mut suite = $storage
-                    .get_or_init(|| ::std::sync::Mutex::new($init))
-                    .lock()
-                    .expect("suitecase: shared suite mutex poisoned");
-                $crate::suite::run(
-                    &mut *suite,
+                $crate::suite::run_suite_case(
+                    &$storage,
+                    &$cursor,
+                    || $init,
                     $cases_static,
-                    $crate::suite::RunConfig::filter(stringify!($name)),
+                    stringify!($name),
                     &$hooks,
                 );
             }
         )*
     };
+}
+
+const SUITE_CURSOR_POISONED: usize = usize::MAX;
+
+/// Runtime helper used by [`test_suite!`]; not part of the stable public API.
+///
+/// # Description
+///
+/// Locates `case_name` in `cases`, locks `storage` (lazily initializing it with `init()`), then
+/// loops: while `cursor` is at or before this case's index, runs the case at the cursor via
+/// [`run`] with [`RunConfig::filter`] and `hooks`, and advances the cursor. Returns once the
+/// cursor has moved past this case's index.
+///
+/// Panics if `case_name` is not in `cases`, if the mutex is poisoned, or if an earlier case
+/// poisoned the cursor. Any panic from a case is re-raised after marking the cursor poisoned.
+#[doc(hidden)]
+pub fn run_suite_case<S: Send>(
+    storage: &std::sync::OnceLock<std::sync::Mutex<S>>,
+    cursor: &std::sync::atomic::AtomicUsize,
+    init: impl FnOnce() -> S,
+    cases: &[Case<S>],
+    case_name: &'static str,
+    hooks: &HookFns<S>,
+) {
+    let my_index = cases
+        .iter()
+        .position(|c| c.name == case_name)
+        .unwrap_or_else(|| {
+            panic!("suitecase: test_suite! case {case_name:?} not found in case list")
+        });
+
+    let mutex = storage.get_or_init(|| std::sync::Mutex::new(init()));
+    let mut suite = match mutex.lock() {
+        Ok(g) => g,
+        Err(_) => panic!("suitecase: test_suite! suite mutex poisoned by an earlier case panic"),
+    };
+
+    loop {
+        let i = cursor.load(std::sync::atomic::Ordering::SeqCst);
+        if i == SUITE_CURSOR_POISONED {
+            panic!("suitecase: test_suite! earlier case panicked; {case_name:?} not run");
+        }
+        if i > my_index {
+            return;
+        }
+        let case = &cases[i];
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run(&mut *suite, cases, RunConfig::filter(case.name), hooks);
+        }));
+        match result {
+            Ok(()) => {
+                cursor.store(i + 1, std::sync::atomic::Ordering::SeqCst);
+            }
+            Err(payload) => {
+                cursor.store(SUITE_CURSOR_POISONED, std::sync::atomic::Ordering::SeqCst);
+                std::panic::resume_unwind(payload);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -307,3 +374,6 @@ mod shared_state_test;
 
 #[cfg(test)]
 mod cargo_filter_output_test;
+
+#[cfg(test)]
+mod test_suite_order_test;
