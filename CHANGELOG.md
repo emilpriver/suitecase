@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.8 — 2026-04-29
+
+### Changed
+
+* Changed to `suitecase test` command for running tests ([#15](https://github.com/emilpriver/suitecase/pull/15))
+* Added support for workspace and release flags to test command ([#15](https://github.com/emilpriver/suitecase/pull/15))
+* Added new CLI for running tests with multiple output formats ([#14](https://github.com/emilpriver/suitecase/pull/14))
+* Added suite name to test output ([#14](https://github.com/emilpriver/suitecase/pull/14))
+
+### Removed
+
+* Removed running tests using test macro, replaced with CLI ([#14](https://github.com/emilpriver/suitecase/pull/14))
+
 ## 0.0.5 — 2026-04-12
 
 ### Added
