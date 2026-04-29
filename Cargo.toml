@@ -9,10 +9,11 @@ repository = "https://github.com/emilpriver/suitecase"
 license = "MIT"
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 
 [[bin]]
 name = "suitecase"
-path = "src/bin/suitecase.rs"
+path = "src/bin/suitecase/bin.rs"
 
 [dev-dependencies]
 serde_json = "1"
