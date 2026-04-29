@@ -1,4 +1,12 @@
-use suitecase::{test_suite, HookFns, Case, cases, run, RunConfig};
+//! Example with a failing test case, used to verify failure output formatting.
+//!
+//! Run: `cargo test --example failing` — one `#[test]` from [`test_suite!`],
+//! running two cases where the second intentionally fails.
+//! `cargo run --example failing` also runs the cases directly.
+
+#![allow(dead_code)]
+
+use suitecase::{Case, HookFns, RunConfig, cases, run, test_suite};
 
 #[derive(Default)]
 struct Counter {
@@ -13,7 +21,7 @@ static FAILING_CASES: &[Case<Counter>] = cases![Counter, s =>
 test_suite!(
     Counter,
     FAILING_SUITE,
-    test_failing,
+    failing_test_run,
     Counter::default(),
     HookFns::default(),
     s =>
