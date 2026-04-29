@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## 0.0.9 — 2026-04-30
+
+### Added
+
+* Added `--version` flag to CLI to print current version
+
+## 0.0.8 — 2026-04-30
 
 ### Changed
 
