@@ -1,16 +1,18 @@
 # Suitcase
 
-**The structured test toolkit.** A lightweight sync Rust library for **named cases**, optional **setup** / **teardown** at suite scope and **before_each** / **after_each** around each case. Build case lists with [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html); use [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) so each case appears as its own line in **`cargo test`**, with all those tests sharing one suite behind a [`Mutex`](https://doc.rust-lang.org/stable/std/sync/struct.Mutex.html).
+**The structured test toolkit.** A lightweight sync Rust library for **named cases**, optional **setup** / **teardown** at suite scope and **before_each** / **after_each** around each case. Build case lists with [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html); use [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) to emit a single `#[test]` that runs all cases sequentially with formatted output.
 
 **Heavy development:** The API is still evolving. Expect **breaking changes** between releases until a stable 1.0; pin an exact version (or git revision) in `Cargo.toml` if you need upgrades to be predictable.
 
-**Install · [Usage](#usage) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [AI-assisted changes](AI_USAGE.md) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
+**Install · [Usage](#usage) · [CLI](#cli) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [AI-assisted changes](AI_USAGE.md) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
 
 ---
 
 - **Sync runner** — [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html) orchestrates hooks and case bodies; integrate async I/O with something like `tokio::runtime::Handle::block_on` in hooks or cases.
+- **Sequential execution** — [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) emits **one** `#[test]` that runs all cases in slice order. Cases that depend on earlier state (setup → mutate → assert) always execute correctly.
+- **Formatted output** — Each case prints `▶ name`, then `✓ name (Xms)` or `✗ name (Xms)`. All cases run even if one fails; the first panic is re-raised after completion.
 - **Hooks as optional fns** — [`HookFns`](https://docs.rs/suitecase/latest/suitecase/suite/struct.HookFns.html) holds `Option<fn(&mut S)>` per lifecycle slot; use [`None`] to skip.
-- **Macros** — [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html) builds `&'static [Case<S>]`. [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) emits one `#[test]` per case name; each run uses [`RunConfig::filter`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.filter) and the **same** shared suite (see macro docs for `Send` and ordering).
+- **CLI** — `suitecase test` runs `cargo test` and renders a formatted summary with pass/fail counts, per-case timing, and failure details.
 - **Assertions** — [`suitecase::assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) provides [testify/assert](https://pkg.go.dev/github.com/stretchr/testify/assert)-style helpers (`equal`, `contains`, `assert_ok`, …) that **panic** on failure with clear messages ([`#[track_caller]`](https://doc.rust-lang.org/stable/std/panic/struct.Location.html) where applicable).
 - **Mocking** — [`suitecase::mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) provides [testify/mock](https://pkg.go.dev/github.com/stretchr/testify/mock)-style **expectations** and **call recording** ([`Mock`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html), [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html)). Use [`suitecase::mock_args`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html) at the crate root (same macro).
 
@@ -24,6 +26,40 @@ Add **suitecase** to your `Cargo.toml` (no required dependencies beyond `std`):
 [dependencies]
 suitecase = "0.1"
 ```
+
+Install the CLI:
+
+```sh
+cargo install suitecase
+```
+
+---
+
+## CLI
+
+Run tests with formatted suitecase output:
+
+```sh
+suitecase test --lib
+suitecase test --example quickstart
+suitecase test --example sqlx_sqlite
+suitecase test --lib -- shared_state    # filter by test name
+```
+
+Output:
+
+```
+Suitecase Summary
+────────────────────────────────────────────────
+  ✓ test_inc (0ms)
+  ✓ test_inc_verify (0ms)
+  ✓ test_double (0ms)
+  ...
+────────────────────────────────────────────────
+  PASSED  12 passed, 0 failed  (total: 0ms)
+```
+
+On failure, a **FAILURES** section shows the panicked case name, duration, file location, and assertion message.
 
 ---
 
@@ -75,26 +111,29 @@ Run: `cargo test`.
 
 Pass [`HookFns`](https://docs.rs/suitecase/latest/suitecase/suite/struct.HookFns.html) as the last argument to [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html). Each field is `Option<fn(&mut S)>` — [`Some(...)]` or [`None`] / [`HookFns::default()`].
 
-### One line per case in `cargo test` (`test_suite!`)
+### Sequential test suite (`test_suite!`)
 
-[`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) expands to one `#[test]` per listed case. Each test locks a **shared** `Mutex<S>` (keyed by a `static` name you choose), then calls [`run`] with [`RunConfig::filter`] for that case. Later tests can observe mutations from earlier runs on the same suite value.
+[`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) emits a **single** `#[test]` that runs all cases sequentially in slice order. Each case prints `▶ name` before execution and `✓ name (Xms)` or `✗ name (Xms)` after. All cases run even if one fails — the first panic is re-raised after all cases complete.
 
 ```rust
-use suitecase::{cases, test_suite, Case, HookFns};
+use suitecase::{test_suite, HookFns};
 
-// MY_CASES, MY_HOOKS, Counter …
+#[derive(Default)]
+struct Counter { n: i32 }
 
 test_suite!(
     Counter,
     MY_SHARED_SUITE,
+    quickstart_test_run,
     Counter::default(),
-    MY_CASES,
-    MY_HOOKS,
-    [test_inc, test_inc_verify]
+    HookFns::default(),
+    s =>
+    test_inc => { s.n += 1; },
+    test_inc_verify => { assert_eq!(s.n, 1); },
 );
 ```
 
-Run: `cargo test`. See the macro’s rustdoc for **ordering** (parallel harness) vs a single [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html) with [`RunConfig::all`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.all).
+Run: `cargo test` or `suitecase test`.
 
 ### Assertions (`assert`)
 
@@ -141,9 +180,9 @@ Unexpected calls **panic** from [`method_called`](https://docs.rs/suitecase/late
 
 | Example | Run |
 |--------|-----|
-| [`examples/quickstart.rs`](examples/quickstart.rs) | `cargo test --example quickstart` |
+| [`examples/quickstart.rs`](examples/quickstart.rs) | `cargo test --example quickstart` · `suitecase test --example quickstart` |
 | [`examples/mock.rs`](examples/mock.rs) | `cargo run --example mock` · `cargo test --example mock` (mocked HTTP-style JSON) |
-| [`examples/sqlx_sqlite.rs`](examples/sqlx_sqlite.rs) | `cargo test --example sqlx_sqlite` |
+| [`examples/sqlx_sqlite.rs`](examples/sqlx_sqlite.rs) | `cargo test --example sqlx_sqlite` · `suitecase test --example sqlx_sqlite` |
 | Every example at once | `cargo test --examples` |
 | Integration tests ([`tests/suite.rs`](tests/suite.rs)) | `cargo test` |
 

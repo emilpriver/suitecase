@@ -21,7 +21,7 @@
 //! | Macro | Role |
 //! |-------|------|
 //! | [`cases!`](crate::cases) | Build `&'static [Case<S>]` from inline blocks per case |
-//! | [`test_suite!`](crate::test_suite) | Emit one `#[test]` per case; all share one `Mutex` suite (optional inline [`cases!`] syntax so names are not repeated) |
+//! | [`test_suite!`](crate::test_suite) | Emit one `#[test]` that runs all cases sequentially with timing output markers |
 //!
 //! # Assertions
 //!

@@ -1,6 +1,6 @@
 //! Subprocess check: `cargo test` output lists each selected test name on its own line.
 //!
-//! Uses the `#[test]` fns emitted by [`test_suite!`] in [`super::suite_test`] (`test_a`, `test_b`).
+//! Uses the `#[test]` fns emitted by [`test_suite!`] in [`super::suite_test`].
 
 use std::process::Command;
 
@@ -11,13 +11,12 @@ fn cargo_test_output_lists_both_filtered_lib_tests() {
 
     let output = Command::new(cargo)
         .current_dir(manifest_dir)
-        // Cargo accepts only one `TESTNAME` before `--`; libtest filters go after `--`.
         .args([
             "test",
             "--lib",
             "--",
-            "suite::suite_test::test_a",
-            "suite::suite_test::test_b",
+            "suite::suite_test::defaults_suite_test_run",
+            "suite::suite_test::recorder_suite_test_run",
         ])
         .output()
         .expect("spawn cargo test");
@@ -41,11 +40,11 @@ fn cargo_test_output_lists_both_filtered_lib_tests() {
         "expected harness to run exactly two tests; output:\n{combined}",
     );
     assert!(
-        combined.contains("suite::suite_test::test_a"),
-        "expected a line for test_a in cargo output; got:\n{combined}",
+        combined.contains("defaults_suite_test_run"),
+        "expected a line for defaults_suite_test_run in cargo output; got:\n{combined}",
     );
     assert!(
-        combined.contains("suite::suite_test::test_b"),
-        "expected a line for test_b in cargo output; got:\n{combined}",
+        combined.contains("recorder_suite_test_run"),
+        "expected a line for recorder_suite_test_run in cargo output; got:\n{combined}",
     );
 }
