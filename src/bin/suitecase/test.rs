@@ -1,5 +1,8 @@
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+
+use crate::OutputMode;
 
 const GREEN: &str = "\x1b[32m";
 const RED: &str = "\x1b[31m";
@@ -12,6 +15,7 @@ struct CaseResult {
     name: String,
     status: CaseStatus,
     ms: u128,
+    stderr: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -20,7 +24,7 @@ enum CaseStatus {
     Fail,
 }
 
-pub fn run(args: Vec<String>) {
+pub fn run(args: Vec<String>, output: OutputMode) {
     let (cargo_args, test_args) = split_at_double_dash(&args);
 
     let mut cmd = Command::new("cargo");
@@ -44,19 +48,42 @@ pub fn run(args: Vec<String>) {
     let stderr = BufReader::new(child.stderr.take().expect("no stderr"));
 
     let mut cases: Vec<CaseResult> = Vec::new();
-    let mut stderr_lines: Vec<String> = Vec::new();
+    let stderr_buf: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let all_stderr: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+    let stderr_buf_clone = Arc::clone(&stderr_buf);
+    let all_stderr_clone = Arc::clone(&all_stderr);
+    let stderr_reader = std::thread::spawn(move || {
+        for line in stderr.lines() {
+            let line = line.expect("read stderr");
+            stderr_buf_clone.lock().unwrap().push(line.clone());
+            all_stderr_clone.lock().unwrap().push(line);
+        }
+    });
 
     for line in stdout.lines() {
         let line = line.expect("read stdout");
-        if let Some(result) = parse_case_line(&line) {
-            cases.push(result);
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("▶ ") {
+            stderr_buf.lock().unwrap().clear();
+        } else if let Some(result) = parse_case_line(&line) {
+            let stderr_for_case = if output == OutputMode::Github {
+                stderr_buf.lock().unwrap().clone()
+            } else {
+                Vec::new()
+            };
+            cases.push(CaseResult {
+                name: result.name,
+                status: result.status,
+                ms: result.ms,
+                stderr: stderr_for_case,
+            });
         }
     }
 
-    for line in stderr.lines() {
-        let line = line.expect("read stderr");
-        stderr_lines.push(line);
-    }
+    stderr_reader.join().expect("stderr thread panicked");
+    let stderr_lines = all_stderr.lock().unwrap().clone();
 
     let exit_status = child.wait().expect("wait for cargo test");
 
@@ -65,10 +92,16 @@ pub fn run(args: Vec<String>) {
         .filter(|c| matches!(c.status, CaseStatus::Fail))
         .collect();
 
-    print_summary(&cases);
-
-    if !failed.is_empty() {
-        print_failures(&failed, &stderr_lines);
+    match output {
+        OutputMode::Tui => {
+            print_tui_summary(&cases);
+            if !failed.is_empty() {
+                print_tui_failures(&failed, &stderr_lines);
+            }
+        }
+        OutputMode::Github => {
+            print_github_actions_output(&cases);
+        }
     }
 
     if !exit_status.success() {
@@ -84,12 +117,19 @@ fn split_at_double_dash(args: &[String]) -> (Vec<String>, Vec<String>) {
     }
 }
 
-fn parse_case_line(line: &str) -> Option<CaseResult> {
+#[derive(Debug)]
+struct ParsedCase {
+    name: String,
+    status: CaseStatus,
+    ms: u128,
+}
+
+fn parse_case_line(line: &str) -> Option<ParsedCase> {
     let trimmed = line.trim();
 
     if let Some(rest) = trimmed.strip_prefix("✓ ") {
         if let Some((name, ms)) = parse_timing(rest) {
-            return Some(CaseResult {
+            return Some(ParsedCase {
                 name,
                 status: CaseStatus::Pass,
                 ms,
@@ -99,7 +139,7 @@ fn parse_case_line(line: &str) -> Option<CaseResult> {
 
     if let Some(rest) = trimmed.strip_prefix("✗ ") {
         if let Some((name, ms)) = parse_timing(rest) {
-            return Some(CaseResult {
+            return Some(ParsedCase {
                 name,
                 status: CaseStatus::Fail,
                 ms,
@@ -123,7 +163,7 @@ fn parse_timing(s: &str) -> Option<(String, u128)> {
     None
 }
 
-fn print_summary(cases: &[CaseResult]) {
+fn print_tui_summary(cases: &[CaseResult]) {
     let passed = cases
         .iter()
         .filter(|c| matches!(c.status, CaseStatus::Pass))
@@ -159,7 +199,7 @@ fn print_summary(cases: &[CaseResult]) {
     );
 }
 
-fn print_failures(failed: &[&CaseResult], stderr_lines: &[String]) {
+fn print_tui_failures(failed: &[&CaseResult], stderr_lines: &[String]) {
     println!();
     println!("{RED}{BOLD}─── FAILURES ───{RESET}");
     println!();
@@ -179,6 +219,35 @@ fn print_failures(failed: &[&CaseResult], stderr_lines: &[String]) {
     }
 
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
+}
+
+fn print_github_actions_output(cases: &[CaseResult]) {
+    for case in cases {
+        let has_output = !case.stderr.is_empty();
+
+        if has_output {
+            println!("::group::{} {} ({}ms)", status_label(&case.status), case.name, case.ms);
+        } else {
+            print!("  {} {} ({}ms)", status_label(&case.status), case.name, case.ms);
+        }
+
+        for line in &case.stderr {
+            println!("{}", line);
+        }
+
+        if has_output {
+            println!("::endgroup::");
+        } else {
+            println!();
+        }
+    }
+}
+
+fn status_label(status: &CaseStatus) -> &'static str {
+    match status {
+        CaseStatus::Pass => "PASS",
+        CaseStatus::Fail => "FAIL",
+    }
 }
 
 fn extract_panic_for_case(_case_name: &str, stderr_lines: &[String]) -> Option<String> {
