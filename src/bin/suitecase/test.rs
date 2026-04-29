@@ -31,11 +31,17 @@ enum CaseStatus {
     Fail,
 }
 
-pub fn run(args: Vec<String>, output: OutputMode) {
+pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool) {
     let (cargo_args, test_args) = split_at_double_dash(&args);
 
     let mut cmd = Command::new("cargo");
     cmd.arg("test");
+    if workspace {
+        cmd.arg("--workspace");
+    }
+    if release {
+        cmd.arg("--release");
+    }
     for arg in &cargo_args {
         cmd.arg(arg);
     }

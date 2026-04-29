@@ -12,7 +12,7 @@
 - **Sequential execution** — [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) emits **one** `#[test]` that runs all cases in slice order. Cases that depend on earlier state (setup → mutate → assert) always execute correctly.
 - **Formatted output** — Each case prints `▶ name`, then `✓ name (Xms)` or `✗ name (Xms)`. All cases run even if one fails; the first panic is re-raised after completion.
 - **Hooks as optional fns** — [`HookFns`](https://docs.rs/suitecase/latest/suitecase/suite/struct.HookFns.html) holds `Option<fn(&mut S)>` per lifecycle slot; use [`None`] to skip.
-- **CLI** — `suitecase test` runs `cargo test` and renders a formatted summary with pass/fail counts, per-case timing, and failure details.
+- **CLI** — `suitecase test` runs `suitecase test` and renders a formatted summary with pass/fail counts, per-case timing, and failure details.
 - **Assertions** — [`suitecase::assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) provides [testify/assert](https://pkg.go.dev/github.com/stretchr/testify/assert)-style helpers (`equal`, `contains`, `assert_ok`, …) that **panic** on failure with clear messages ([`#[track_caller]`](https://doc.rust-lang.org/stable/std/panic/struct.Location.html) where applicable).
 - **Mocking** — [`suitecase::mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) provides [testify/mock](https://pkg.go.dev/github.com/stretchr/testify/mock)-style **expectations** and **call recording** ([`Mock`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html), [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html)). Use [`suitecase::mock_args`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html) at the crate root (same macro).
 
@@ -67,7 +67,7 @@ On failure, a **FAILURES** section shows the panicked case name, duration, file 
 
 ### Quickstart
 
-Put this in `tests/suite.rs` or `#[cfg(test)] mod tests { ... }`. The [example](examples/quickstart.rs) is `cargo test --example quickstart` — **one** test line that runs every case in order on **one** suite.
+Put this in `tests/suite.rs` or `#[cfg(test)] mod tests { ... }`. The [example](examples/quickstart.rs) is `suitecase test --example quickstart` — **one** test line that runs every case in order on **one** suite.
 
 ```rust
 use suitecase::{cases, run, Case, HookFns, RunConfig};
@@ -105,7 +105,7 @@ fn quickstart() {
 }
 ```
 
-Run: `cargo test`.
+Run: `suitecase test`.
 
 ### Hooks
 
@@ -133,7 +133,7 @@ test_suite!(
 );
 ```
 
-Run: `cargo test` or `suitecase test`.
+Run: `suitecase test` or `suitecase test`.
 
 ### Assertions (`assert`)
 
@@ -180,11 +180,11 @@ Unexpected calls **panic** from [`method_called`](https://docs.rs/suitecase/late
 
 | Example | Run |
 |--------|-----|
-| [`examples/quickstart.rs`](examples/quickstart.rs) | `cargo test --example quickstart` · `suitecase test --example quickstart` |
-| [`examples/mock.rs`](examples/mock.rs) | `cargo run --example mock` · `cargo test --example mock` (mocked HTTP-style JSON) |
-| [`examples/sqlx_sqlite.rs`](examples/sqlx_sqlite.rs) | `cargo test --example sqlx_sqlite` · `suitecase test --example sqlx_sqlite` |
-| Every example at once | `cargo test --examples` |
-| Integration tests ([`tests/suite.rs`](tests/suite.rs)) | `cargo test` |
+| [`examples/quickstart.rs`](examples/quickstart.rs) | `suitecase test --example quickstart` · `suitecase test --example quickstart` |
+| [`examples/mock.rs`](examples/mock.rs) | `cargo run --example mock` · `suitecase test --example mock` (mocked HTTP-style JSON) |
+| [`examples/sqlx_sqlite.rs`](examples/sqlx_sqlite.rs) | `suitecase test --example sqlx_sqlite` · `suitecase test --example sqlx_sqlite` |
+| Every example at once | `suitecase test --examples` |
+| Integration tests ([`tests/suite.rs`](tests/suite.rs)) | `suitecase test` |
 
 The **sqlx** example uses **sqlx** + **tokio**, embedded migrations in `setup_suite`, and [`cases!`](https://docs.rs/suitecase/latest/suitecase/macro.cases.html) blocks that call helper functions, plus [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html).
 

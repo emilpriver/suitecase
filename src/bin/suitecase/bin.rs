@@ -27,6 +27,14 @@ enum Commands {
         #[arg(long, default_value = "tui")]
         output: OutputMode,
 
+        /// Build and test with all workspace members
+        #[arg(long)]
+        workspace: bool,
+
+        /// Build artifacts in release mode with optimizations
+        #[arg(long)]
+        release: bool,
+
         /// Arguments passed directly to cargo test
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
@@ -37,8 +45,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Test { args, output } => {
-            test::run(args, output);
+        Commands::Test { args, output, workspace, release } => {
+            test::run(args, output, workspace, release);
         }
     }
 }
