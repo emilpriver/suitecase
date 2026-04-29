@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.8 — 2026-04-29
+## [Unreleased]
 
 ### Changed
 
@@ -12,6 +12,10 @@
 ### Removed
 
 * Removed running tests using test macro, replaced with CLI ([#14](https://github.com/emilpriver/suitecase/pull/14))
+
+## 0.0.7 — 2026-04-12
+
+## 0.0.6 — 2026-04-12
 
 ## 0.0.5 — 2026-04-12
 
