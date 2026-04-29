@@ -104,40 +104,6 @@ impl RunConfig {
 /// See the [module-level **Execution model** section](crate::suite#execution-model) for ordering and
 /// panic behavior.
 pub fn run<S>(suite: &mut S, cases: &[Case<S>], config: RunConfig, hooks: &HookFns<S>) {
-    run_hooks(
-        suite,
-        cases,
-        config,
-        |s| {
-            if let Some(f) = hooks.setup_suite {
-                f(s);
-            }
-        },
-        |s| {
-            if let Some(f) = hooks.teardown_suite {
-                f(s);
-            }
-        },
-        |s| {
-            if let Some(f) = hooks.before_each {
-                f(s);
-            }
-        },
-        |s| {
-            if let Some(f) = hooks.after_each {
-                f(s);
-            }
-        },
-    );
-}
-
-/// Run all cases sequentially with timing output markers.
-///
-/// Prints `▶ {name}` before each case, and `✓ {name} ({duration}ms)` or
-/// `✗ {name} ({duration}ms)` after. Output is machine-parseable for the `cargo suitecase test` CLI.
-///
-/// Panics from a case body are re-raised after printing the failure marker.
-pub fn run_with_output<S>(suite: &mut S, cases: &[Case<S>], config: RunConfig, hooks: &HookFns<S>) {
     run_hooks_with_output(
         suite,
         cases,
@@ -219,56 +185,6 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     }
     teardown_suite(suite);
     if let Some(payload) = first_panic {
-        std::panic::resume_unwind(payload);
-    }
-}
-
-fn run_hooks<S, FS, FT, FB, FA>(
-    suite: &mut S,
-    cases: &[Case<S>],
-    config: RunConfig,
-    mut setup_suite: FS,
-    mut teardown_suite: FT,
-    mut before_each: FB,
-    mut after_each: FA,
-) where
-    FS: FnMut(&mut S),
-    FT: FnMut(&mut S),
-    FB: FnMut(&mut S),
-    FA: FnMut(&mut S),
-{
-    let selected: Vec<&Case<S>> = cases
-        .iter()
-        .filter(|c| match &config.filter {
-            None => true,
-            Some(f) => c.name == f,
-        })
-        .collect();
-
-    if selected.is_empty() {
-        assert!(
-            config.filter.is_none(),
-            "suitcase: filter {:?} matched no cases",
-            config.filter
-        );
-        return;
-    }
-
-    setup_suite(suite);
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        for case in selected {
-            before_each(suite);
-            let case_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                (case.run)(suite);
-            }));
-            after_each(suite);
-            if let Err(payload) = case_result {
-                std::panic::resume_unwind(payload);
-            }
-        }
-    }));
-    teardown_suite(suite);
-    if let Err(payload) = result {
         std::panic::resume_unwind(payload);
     }
 }
@@ -356,7 +272,7 @@ macro_rules! test_suite {
 
         #[test]
         fn $test() {
-            println!("◆ {}", stringify!($storage));
+            println!("◆ {} {}", stringify!($storage), stringify!($test));
             let mut suite = $storage
                 .get_or_init(|| ::std::sync::Mutex::new($init))
                 .lock()
@@ -364,7 +280,7 @@ macro_rules! test_suite {
             let cases: &[$crate::suite::Case<$ty>] = &[$(
                 $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| $body)
             ),*];
-            $crate::suite::run_with_output(
+            $crate::suite::run(
                 &mut *suite,
                 cases,
                 $crate::suite::RunConfig::all(),

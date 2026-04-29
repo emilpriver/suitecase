@@ -117,3 +117,8 @@ fn quickstart_body() {
 fn main() {
     quickstart_body();
 }
+
+#[test]
+fn some_test() {
+    assert!(true)
+}

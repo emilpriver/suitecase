@@ -12,7 +12,8 @@ const RESET: &str = "\x1b[0m";
 
 #[derive(Debug)]
 struct SuiteResult {
-    name: String,
+    storage_name: String,
+    test_name: String,
     cases: Vec<CaseResult>,
     stderr: Vec<String>,
 }
@@ -54,8 +55,10 @@ pub fn run(args: Vec<String>, output: OutputMode) {
     let stderr = BufReader::new(child.stderr.take().expect("no stderr"));
 
     let mut suites: Vec<SuiteResult> = Vec::new();
-    let mut current_suite: Option<String> = None;
+    let mut current_storage: Option<String> = None;
+    let mut current_test: Option<String> = None;
     let mut current_cases: Vec<CaseResult> = Vec::new();
+    let mut regular_tests: Vec<CaseResult> = Vec::new();
     let all_stderr: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
     let all_stderr_clone = Arc::clone(&all_stderr);
@@ -70,17 +73,28 @@ pub fn run(args: Vec<String>, output: OutputMode) {
         let line = line.expect("read stdout");
         let trimmed = line.trim();
 
-        if let Some(suite_name) = trimmed.strip_prefix("◆ ") {
-            if let Some(name) = current_suite.take() {
-                suites.push(SuiteResult {
-                    name,
-                    cases: std::mem::take(&mut current_cases),
-                    stderr: Vec::new(),
-                });
+        if let Some(rest) = trimmed.strip_prefix("◆ ") {
+            let parts: Vec<&str> = rest.splitn(2, ' ').collect();
+            if parts.len() == 2 {
+                if let Some(test_name) = current_test.take() {
+                    suites.push(SuiteResult {
+                        storage_name: current_storage.take().unwrap_or_default(),
+                        test_name,
+                        cases: std::mem::take(&mut current_cases),
+                        stderr: Vec::new(),
+                    });
+                }
+                current_storage = Some(parts[0].to_string());
+                current_test = Some(parts[1].to_string());
             }
-            current_suite = Some(suite_name.to_string());
         } else if let Some(result) = parse_case_line(&line) {
             current_cases.push(CaseResult {
+                name: result.name,
+                status: result.status,
+                ms: result.ms,
+            });
+        } else if let Some(result) = parse_cargo_test_line(&line) {
+            regular_tests.push(CaseResult {
                 name: result.name,
                 status: result.status,
                 ms: result.ms,
@@ -88,9 +102,10 @@ pub fn run(args: Vec<String>, output: OutputMode) {
         }
     }
 
-    if let Some(name) = current_suite.take() {
+    if let Some(test_name) = current_test.take() {
         suites.push(SuiteResult {
-            name,
+            storage_name: current_storage.take().unwrap_or_default(),
+            test_name,
             cases: std::mem::take(&mut current_cases),
             stderr: Vec::new(),
         });
@@ -100,14 +115,14 @@ pub fn run(args: Vec<String>, output: OutputMode) {
     let stderr_lines = all_stderr.lock().unwrap().clone();
 
     if output == OutputMode::Github {
-        let failed_suite_names: Vec<String> = suites
+        let failed_names: Vec<String> = suites
             .iter()
             .filter(|s| s.cases.iter().any(|c| matches!(c.status, CaseStatus::Fail)))
-            .map(|s| s.name.clone())
+            .map(|s| s.test_name.clone())
             .collect();
 
         for suite in &mut suites {
-            if failed_suite_names.contains(&suite.name) {
+            if failed_names.contains(&suite.test_name) {
                 suite.stderr = extract_all_stderr(&stderr_lines);
             }
         }
@@ -115,7 +130,14 @@ pub fn run(args: Vec<String>, output: OutputMode) {
 
     let exit_status = child.wait().expect("wait for cargo test");
 
-    let all_cases: Vec<&CaseResult> = suites.iter().flat_map(|s| s.cases.iter()).collect();
+    let suite_test_names: Vec<&str> = suites.iter().map(|s| s.test_name.as_str()).collect();
+    let filtered_regular: Vec<&CaseResult> = regular_tests
+        .iter()
+        .filter(|t| !suite_test_names.contains(&t.name.as_str()))
+        .collect();
+
+    let mut all_cases: Vec<&CaseResult> = suites.iter().flat_map(|s| s.cases.iter()).collect();
+    all_cases.extend(filtered_regular.iter().copied());
     let failed: Vec<&CaseResult> = all_cases
         .iter()
         .filter(|c| matches!(c.status, CaseStatus::Fail))
@@ -130,7 +152,7 @@ pub fn run(args: Vec<String>, output: OutputMode) {
             }
         }
         OutputMode::Github => {
-            print_github_actions_output(&suites);
+            print_github_actions_output(&suites, &regular_tests, &suite_test_names);
         }
     }
 
@@ -172,6 +194,31 @@ struct ParsedCase {
     name: String,
     status: CaseStatus,
     ms: u128,
+}
+
+fn parse_cargo_test_line(line: &str) -> Option<ParsedCase> {
+    let trimmed = line.trim();
+
+    if let Some(rest) = trimmed.strip_prefix("test ") {
+        if let Some(name_end) = rest.find(" ... ") {
+            let name = rest[..name_end].to_string();
+            let result_part = &rest[name_end + 5..];
+            let status = if result_part == "ok" {
+                CaseStatus::Pass
+            } else if result_part.starts_with("FAILED") {
+                CaseStatus::Fail
+            } else {
+                return None;
+            };
+            return Some(ParsedCase {
+                name,
+                status,
+                ms: 0,
+            });
+        }
+    }
+
+    None
 }
 
 fn parse_case_line(line: &str) -> Option<ParsedCase> {
@@ -271,14 +318,20 @@ fn print_tui_failures(failed: &[&CaseResult], stderr_lines: &[String]) {
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
 }
 
-fn print_github_actions_output(suites: &[SuiteResult]) {
+fn print_github_actions_output(suites: &[SuiteResult], regular_tests: &[CaseResult], suite_test_names: &[&str]) {
     for suite in suites {
         for case in &suite.cases {
-            println!("  {} {}::{} ({}ms)", status_label(&case.status), suite.name, case.name, case.ms);
+            println!("  {} {}::{} ({}ms)", status_label(&case.status), suite.storage_name, case.name, case.ms);
         }
 
         for line in &suite.stderr {
             println!("{}", line);
+        }
+    }
+
+    for test in regular_tests {
+        if !suite_test_names.contains(&test.name.as_str()) {
+            println!("  {} {} ({}ms)", status_label(&test.status), test.name, test.ms);
         }
     }
 }
