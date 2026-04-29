@@ -11,11 +11,17 @@ const DIM: &str = "\x1b[2m";
 const RESET: &str = "\x1b[0m";
 
 #[derive(Debug)]
+struct SuiteResult {
+    name: String,
+    cases: Vec<CaseResult>,
+    stderr: Vec<String>,
+}
+
+#[derive(Debug)]
 struct CaseResult {
     name: String,
     status: CaseStatus,
     ms: u128,
-    stderr: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -47,16 +53,15 @@ pub fn run(args: Vec<String>, output: OutputMode) {
     let stdout = BufReader::new(child.stdout.take().expect("no stdout"));
     let stderr = BufReader::new(child.stderr.take().expect("no stderr"));
 
-    let mut cases: Vec<CaseResult> = Vec::new();
-    let stderr_buf: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut suites: Vec<SuiteResult> = Vec::new();
+    let mut current_suite: Option<String> = None;
+    let mut current_cases: Vec<CaseResult> = Vec::new();
     let all_stderr: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
-    let stderr_buf_clone = Arc::clone(&stderr_buf);
     let all_stderr_clone = Arc::clone(&all_stderr);
     let stderr_reader = std::thread::spawn(move || {
         for line in stderr.lines() {
             let line = line.expect("read stderr");
-            stderr_buf_clone.lock().unwrap().push(line.clone());
             all_stderr_clone.lock().unwrap().push(line);
         }
     });
@@ -65,48 +70,93 @@ pub fn run(args: Vec<String>, output: OutputMode) {
         let line = line.expect("read stdout");
         let trimmed = line.trim();
 
-        if trimmed.starts_with("▶ ") {
-            stderr_buf.lock().unwrap().clear();
+        if let Some(suite_name) = trimmed.strip_prefix("◆ ") {
+            if let Some(name) = current_suite.take() {
+                suites.push(SuiteResult {
+                    name,
+                    cases: std::mem::take(&mut current_cases),
+                    stderr: Vec::new(),
+                });
+            }
+            current_suite = Some(suite_name.to_string());
         } else if let Some(result) = parse_case_line(&line) {
-            let stderr_for_case = if output == OutputMode::Github {
-                stderr_buf.lock().unwrap().clone()
-            } else {
-                Vec::new()
-            };
-            cases.push(CaseResult {
+            current_cases.push(CaseResult {
                 name: result.name,
                 status: result.status,
                 ms: result.ms,
-                stderr: stderr_for_case,
             });
         }
+    }
+
+    if let Some(name) = current_suite.take() {
+        suites.push(SuiteResult {
+            name,
+            cases: std::mem::take(&mut current_cases),
+            stderr: Vec::new(),
+        });
     }
 
     stderr_reader.join().expect("stderr thread panicked");
     let stderr_lines = all_stderr.lock().unwrap().clone();
 
+    if output == OutputMode::Github {
+        let failed_suite_names: Vec<String> = suites
+            .iter()
+            .filter(|s| s.cases.iter().any(|c| matches!(c.status, CaseStatus::Fail)))
+            .map(|s| s.name.clone())
+            .collect();
+
+        for suite in &mut suites {
+            if failed_suite_names.contains(&suite.name) {
+                suite.stderr = extract_all_stderr(&stderr_lines);
+            }
+        }
+    }
+
     let exit_status = child.wait().expect("wait for cargo test");
 
-    let failed: Vec<&CaseResult> = cases
+    let all_cases: Vec<&CaseResult> = suites.iter().flat_map(|s| s.cases.iter()).collect();
+    let failed: Vec<&CaseResult> = all_cases
         .iter()
         .filter(|c| matches!(c.status, CaseStatus::Fail))
+        .copied()
         .collect();
 
     match output {
         OutputMode::Tui => {
-            print_tui_summary(&cases);
+            print_tui_summary(&all_cases);
             if !failed.is_empty() {
                 print_tui_failures(&failed, &stderr_lines);
             }
         }
         OutputMode::Github => {
-            print_github_actions_output(&cases);
+            print_github_actions_output(&suites);
         }
     }
 
     if !exit_status.success() {
         std::process::exit(1);
     }
+}
+
+fn extract_all_stderr(stderr_lines: &[String]) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut in_panic = false;
+
+    for line in stderr_lines {
+        if line.starts_with("thread ") && line.contains("panicked") {
+            in_panic = true;
+        }
+
+        if in_panic {
+            if line.starts_with("error: test failed") || line.starts_with("failures:") {
+                break;
+            }
+            result.push(line.clone());
+        }
+    }
+
+    result
 }
 
 fn split_at_double_dash(args: &[String]) -> (Vec<String>, Vec<String>) {
@@ -163,7 +213,7 @@ fn parse_timing(s: &str) -> Option<(String, u128)> {
     None
 }
 
-fn print_tui_summary(cases: &[CaseResult]) {
+fn print_tui_summary(cases: &[&CaseResult]) {
     let passed = cases
         .iter()
         .filter(|c| matches!(c.status, CaseStatus::Pass))
@@ -221,24 +271,14 @@ fn print_tui_failures(failed: &[&CaseResult], stderr_lines: &[String]) {
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
 }
 
-fn print_github_actions_output(cases: &[CaseResult]) {
-    for case in cases {
-        let has_output = !case.stderr.is_empty();
-
-        if has_output {
-            println!("::group::{} {} ({}ms)", status_label(&case.status), case.name, case.ms);
-        } else {
-            print!("  {} {} ({}ms)", status_label(&case.status), case.name, case.ms);
+fn print_github_actions_output(suites: &[SuiteResult]) {
+    for suite in suites {
+        for case in &suite.cases {
+            println!("  {} {}::{} ({}ms)", status_label(&case.status), suite.name, case.name, case.ms);
         }
 
-        for line in &case.stderr {
+        for line in &suite.stderr {
             println!("{}", line);
-        }
-
-        if has_output {
-            println!("::endgroup::");
-        } else {
-            println!();
         }
     }
 }

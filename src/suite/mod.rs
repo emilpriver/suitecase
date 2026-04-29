@@ -356,6 +356,7 @@ macro_rules! test_suite {
 
         #[test]
         fn $test() {
+            println!("◆ {}", stringify!($storage));
             let mut suite = $storage
                 .get_or_init(|| ::std::sync::Mutex::new($init))
                 .lock()
