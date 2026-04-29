@@ -141,12 +141,7 @@ fn default_hooks_run_cases_only() {
     static CASES: &[Case<DefaultsOnly>] = cases![DefaultsOnly, s =>
         test_one => { s.test_one(); },
     ];
-    run(
-        &mut suite,
-        CASES,
-        RunConfig::all(),
-        &HookFns::default(),
-    );
+    run(&mut suite, CASES, RunConfig::all(), &HookFns::default());
     assert_eq!(suite.n, 7);
 }
 

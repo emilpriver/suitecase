@@ -199,23 +199,23 @@ struct ParsedCase {
 fn parse_cargo_test_line(line: &str) -> Option<ParsedCase> {
     let trimmed = line.trim();
 
-    if let Some(rest) = trimmed.strip_prefix("test ") {
-        if let Some(name_end) = rest.find(" ... ") {
-            let name = rest[..name_end].to_string();
-            let result_part = &rest[name_end + 5..];
-            let status = if result_part == "ok" {
-                CaseStatus::Pass
-            } else if result_part.starts_with("FAILED") {
-                CaseStatus::Fail
-            } else {
-                return None;
-            };
-            return Some(ParsedCase {
-                name,
-                status,
-                ms: 0,
-            });
-        }
+    if let Some(rest) = trimmed.strip_prefix("test ")
+        && let Some(name_end) = rest.find(" ... ")
+    {
+        let name = rest[..name_end].to_string();
+        let result_part = &rest[name_end + 5..];
+        let status = if result_part == "ok" {
+            CaseStatus::Pass
+        } else if result_part.starts_with("FAILED") {
+            CaseStatus::Fail
+        } else {
+            return None;
+        };
+        return Some(ParsedCase {
+            name,
+            status,
+            ms: 0,
+        });
     }
 
     None
@@ -224,24 +224,24 @@ fn parse_cargo_test_line(line: &str) -> Option<ParsedCase> {
 fn parse_case_line(line: &str) -> Option<ParsedCase> {
     let trimmed = line.trim();
 
-    if let Some(rest) = trimmed.strip_prefix("✓ ") {
-        if let Some((name, ms)) = parse_timing(rest) {
-            return Some(ParsedCase {
-                name,
-                status: CaseStatus::Pass,
-                ms,
-            });
-        }
+    if let Some(rest) = trimmed.strip_prefix("✓ ")
+        && let Some((name, ms)) = parse_timing(rest)
+    {
+        return Some(ParsedCase {
+            name,
+            status: CaseStatus::Pass,
+            ms,
+        });
     }
 
-    if let Some(rest) = trimmed.strip_prefix("✗ ") {
-        if let Some((name, ms)) = parse_timing(rest) {
-            return Some(ParsedCase {
-                name,
-                status: CaseStatus::Fail,
-                ms,
-            });
-        }
+    if let Some(rest) = trimmed.strip_prefix("✗ ")
+        && let Some((name, ms)) = parse_timing(rest)
+    {
+        return Some(ParsedCase {
+            name,
+            status: CaseStatus::Fail,
+            ms,
+        });
     }
 
     None
@@ -251,10 +251,10 @@ fn parse_timing(s: &str) -> Option<(String, u128)> {
     if let Some(pos) = s.rfind(" (") {
         let name = s[..pos].to_string();
         let timing = &s[pos + 2..];
-        if let Some(end) = timing.find("ms)") {
-            if let Ok(ms) = timing[..end].parse::<u128>() {
-                return Some((name, ms));
-            }
+        if let Some(end) = timing.find("ms)")
+            && let Ok(ms) = timing[..end].parse::<u128>()
+        {
+            return Some((name, ms));
         }
     }
     None
@@ -318,10 +318,20 @@ fn print_tui_failures(failed: &[&CaseResult], stderr_lines: &[String]) {
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
 }
 
-fn print_github_actions_output(suites: &[SuiteResult], regular_tests: &[CaseResult], suite_test_names: &[&str]) {
+fn print_github_actions_output(
+    suites: &[SuiteResult],
+    regular_tests: &[CaseResult],
+    suite_test_names: &[&str],
+) {
     for suite in suites {
         for case in &suite.cases {
-            println!("  {} {}::{} ({}ms)", status_label(&case.status), suite.storage_name, case.name, case.ms);
+            println!(
+                "  {} {}::{} ({}ms)",
+                status_label(&case.status),
+                suite.storage_name,
+                case.name,
+                case.ms
+            );
         }
 
         for line in &suite.stderr {
@@ -331,7 +341,12 @@ fn print_github_actions_output(suites: &[SuiteResult], regular_tests: &[CaseResu
 
     for test in regular_tests {
         if !suite_test_names.contains(&test.name.as_str()) {
-            println!("  {} {} ({}ms)", status_label(&test.status), test.name, test.ms);
+            println!(
+                "  {} {} ({}ms)",
+                status_label(&test.status),
+                test.name,
+                test.ms
+            );
         }
     }
 }
