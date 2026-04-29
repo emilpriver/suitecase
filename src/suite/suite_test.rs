@@ -52,11 +52,6 @@ static RECORDER_HOOKS: HookFns<Recorder> = HookFns {
     after_each: Some(rec_after),
 };
 
-static RECORDER_CASES: &[Case<Recorder>] = cases![Recorder, s =>
-    test_a => { s.test_a(); },
-    test_b => { s.test_b(); },
-];
-
 #[derive(Default)]
 struct DefaultsOnly {
     n: i32,
@@ -78,7 +73,7 @@ static DEFAULTS_HOOKS: HookFns<DefaultsOnly> = HookFns {
 test_suite!(
     DefaultsOnly,
     DEFAULTS_SUITE,
-    DEFAULTS_CASES,
+    defaults_suite_test_run,
     DefaultsOnly::default(),
     DEFAULTS_HOOKS,
     s =>
@@ -88,13 +83,14 @@ test_suite!(
 test_suite!(
     Recorder,
     REC_SUITE,
+    recorder_suite_test_run,
     Recorder::default(),
-    RECORDER_CASES,
     RECORDER_HOOKS,
-    [test_a, test_b]
+    s =>
+    test_a => { s.test_a(); },
+    test_b => { s.test_b(); },
 );
 
-/// One generated test; exercises `test_suite!` (shared `Mutex` suite path).
 #[derive(Default)]
 struct SharedSmoke(u8);
 
@@ -103,10 +99,6 @@ impl SharedSmoke {
         self.0 = 1;
     }
 }
-
-static SHARED_SMOKE_CASES: &[Case<SharedSmoke>] = cases![SharedSmoke, s =>
-    test_shared_smoke => { s.test_shared_smoke(); },
-];
 
 static SHARED_SMOKE_HOOKS: HookFns<SharedSmoke> = HookFns {
     setup_suite: None,
@@ -118,10 +110,11 @@ static SHARED_SMOKE_HOOKS: HookFns<SharedSmoke> = HookFns {
 test_suite!(
     SharedSmoke,
     SHARED_SMOKE_SUITE,
+    shared_smoke_suite_test_run,
     SharedSmoke::default(),
-    SHARED_SMOKE_CASES,
     SHARED_SMOKE_HOOKS,
-    [test_shared_smoke]
+    s =>
+    test_shared_smoke => { s.test_shared_smoke(); },
 );
 
 fn case_fn_a(s: &mut Recorder) {
@@ -131,26 +124,26 @@ fn case_fn_b(s: &mut Recorder) {
     s.push("b");
 }
 
-static RECORDER_FN_CASES: &[Case<Recorder>] = cases![Recorder, s =>
-    suite_cf_a => { case_fn_a(s); },
-    suite_cf_b => { case_fn_b(s); },
-];
-
 test_suite!(
     Recorder,
     REC_FN_SUITE,
+    rec_fn_suite_test_run,
     Recorder::default(),
-    RECORDER_FN_CASES,
     RECORDER_HOOKS,
-    [suite_cf_a, suite_cf_b]
+    s =>
+    suite_cf_a => { case_fn_a(s); },
+    suite_cf_b => { case_fn_b(s); },
 );
 
 #[test]
 fn default_hooks_run_cases_only() {
     let mut suite = DefaultsOnly::default();
+    static CASES: &[Case<DefaultsOnly>] = cases![DefaultsOnly, s =>
+        test_one => { s.test_one(); },
+    ];
     run(
         &mut suite,
-        DEFAULTS_CASES,
+        CASES,
         RunConfig::all(),
         &HookFns::default(),
     );
@@ -160,6 +153,10 @@ fn default_hooks_run_cases_only() {
 #[test]
 fn hook_order_all_cases() {
     let mut suite = Recorder::default();
+    static RECORDER_CASES: &[Case<Recorder>] = cases![Recorder, s =>
+        test_a => { s.test_a(); },
+        test_b => { s.test_b(); },
+    ];
     run(
         &mut suite,
         RECORDER_CASES,
@@ -185,6 +182,10 @@ fn hook_order_all_cases() {
 #[test]
 fn singular_filtered_case_runs_setup_and_teardown() {
     let mut suite = Recorder::default();
+    static RECORDER_CASES: &[Case<Recorder>] = cases![Recorder, s =>
+        test_a => { s.test_a(); },
+        test_b => { s.test_b(); },
+    ];
     run(
         &mut suite,
         RECORDER_CASES,
@@ -207,6 +208,10 @@ fn singular_filtered_case_runs_setup_and_teardown() {
 #[test]
 fn cases_inline_free_functions() {
     let mut suite = Recorder::default();
+    static RECORDER_FN_CASES: &[Case<Recorder>] = cases![Recorder, s =>
+        suite_cf_a => { case_fn_a(s); },
+        suite_cf_b => { case_fn_b(s); },
+    ];
     run(
         &mut suite,
         RECORDER_FN_CASES,
@@ -231,7 +236,8 @@ fn cases_inline_free_functions() {
 #[test]
 fn no_cases_no_setup() {
     let mut suite = Recorder::default();
-    run(&mut suite, &[], RunConfig::all(), &RECORDER_HOOKS);
+    static EMPTY: &[Case<Recorder>] = &[];
+    run(&mut suite, EMPTY, RunConfig::all(), &RECORDER_HOOKS);
     assert!(suite.log.is_empty());
 }
 

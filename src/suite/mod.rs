@@ -131,6 +131,98 @@ pub fn run<S>(suite: &mut S, cases: &[Case<S>], config: RunConfig, hooks: &HookF
     );
 }
 
+/// Run all cases sequentially with timing output markers.
+///
+/// Prints `▶ {name}` before each case, and `✓ {name} ({duration}ms)` or
+/// `✗ {name} ({duration}ms)` after. Output is machine-parseable for the `cargo suitecase test` CLI.
+///
+/// Panics from a case body are re-raised after printing the failure marker.
+pub fn run_with_output<S>(suite: &mut S, cases: &[Case<S>], config: RunConfig, hooks: &HookFns<S>) {
+    run_hooks_with_output(
+        suite,
+        cases,
+        config,
+        |s| {
+            if let Some(f) = hooks.setup_suite {
+                f(s);
+            }
+        },
+        |s| {
+            if let Some(f) = hooks.teardown_suite {
+                f(s);
+            }
+        },
+        |s| {
+            if let Some(f) = hooks.before_each {
+                f(s);
+            }
+        },
+        |s| {
+            if let Some(f) = hooks.after_each {
+                f(s);
+            }
+        },
+    );
+}
+
+fn run_hooks_with_output<S, FS, FT, FB, FA>(
+    suite: &mut S,
+    cases: &[Case<S>],
+    config: RunConfig,
+    mut setup_suite: FS,
+    mut teardown_suite: FT,
+    mut before_each: FB,
+    mut after_each: FA,
+) where
+    FS: FnMut(&mut S),
+    FT: FnMut(&mut S),
+    FB: FnMut(&mut S),
+    FA: FnMut(&mut S),
+{
+    let selected: Vec<&Case<S>> = cases
+        .iter()
+        .filter(|c| match &config.filter {
+            None => true,
+            Some(f) => c.name == f,
+        })
+        .collect();
+
+    if selected.is_empty() {
+        assert!(
+            config.filter.is_none(),
+            "suitcase: filter {:?} matched no cases",
+            config.filter
+        );
+        return;
+    }
+
+    setup_suite(suite);
+    let mut first_panic: Option<Box<dyn std::any::Any + Send>> = None;
+    for case in selected {
+        println!("▶ {}", case.name);
+        let start = std::time::Instant::now();
+        before_each(suite);
+        let case_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            (case.run)(suite);
+        }));
+        after_each(suite);
+        let elapsed = start.elapsed();
+        let ms = elapsed.as_millis();
+        if let Err(payload) = case_result {
+            println!("✗ {} ({}ms)", case.name, ms);
+            if first_panic.is_none() {
+                first_panic = Some(payload);
+            }
+        } else {
+            println!("✓ {} ({}ms)", case.name, ms);
+        }
+    }
+    teardown_suite(suite);
+    if let Some(payload) = first_panic {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 fn run_hooks<S, FS, FT, FB, FA>(
     suite: &mut S,
     cases: &[Case<S>],
@@ -220,82 +312,64 @@ macro_rules! cases {
     };
 }
 
-/// Emit one `#[test]` per listed case name. Each test locks a **shared** suite behind a
-/// [`std::sync::Mutex`] in a [`std::sync::OnceLock`] keyed by `$storage`, then calls [`run`] with
-/// [`RunConfig::filter`] and your [`HookFns`].
+/// Emit a **single** `#[test]` that runs all cases sequentially in slice order, with timing output.
 ///
-/// `$ty` must be [`Send`]. The harness may run tests in any order or in parallel; if one case
-/// depends on another having run first on the same suite, see the macro docs on ordering, or call
-/// [`run`] once with [`RunConfig::all`] instead.
+/// Each case prints `▶ {name}` before execution and `✓ {name} ({ms}ms)` or
+/// `✗ {name} ({ms}ms)` after. Output is machine-parseable for `cargo suitecase test`.
+///
+/// Use this when cases depend on each other having run first (e.g., setup → mutate → assert).
 ///
 /// # Declaration
 ///
-/// **Split cases and names** — pass a [`cases!`] slice (or any `&[Case<S>]`) plus a matching list of
-/// identifiers for the generated `#[test]` functions:
-///
 /// ```text
 /// test_suite! {
-///     $ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?
-/// }
-/// ```
-///
-/// **Inline cases** — same syntax as [`cases!`], written once; the macro defines `$cases_static`
-/// and emits one `#[test] fn $name` per case:
-///
-/// ```text
-/// test_suite! {
-///     $ty:ty, $storage:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
+///     $ty:ty, $storage:ident, $init:expr, $hooks:expr, $s:ident =>
 ///         $($name:ident => $body:block),* $(,)?
 /// }
 /// ```
+///
+/// # Example
+///
+/// ```
+/// use suitecase::{test_suite, HookFns};
+///
+/// #[derive(Default)]
+/// struct Counter { n: i32 }
+///
+/// test_suite!(
+///     Counter,
+///     MY_SUITE,
+///     Counter::default(),
+///     HookFns::default(),
+///     s =>
+///     setup => { s.n = 1; },
+///     verify => { assert_eq!(s.n, 1); },
+/// );
+/// ```
 #[macro_export]
 macro_rules! test_suite {
-    ($ty:ty, $storage:ident, $init:expr, $cases:expr, $hooks:expr, [$($name:ident),* $(,)?] $(,)?) => {
-        static $storage: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
-            ::std::sync::OnceLock::new();
-
-        $(
-            #[test]
-            fn $name() {
-                let mut suite = $storage
-                    .get_or_init(|| ::std::sync::Mutex::new($init))
-                    .lock()
-                    .expect("suitecase: shared suite mutex poisoned");
-                $crate::suite::run(
-                    &mut *suite,
-                    $cases,
-                    $crate::suite::RunConfig::filter(stringify!($name)),
-                    &$hooks,
-                );
-            }
-        )*
-    };
-
-    ($ty:ty, $storage:ident, $cases_static:ident, $init:expr, $hooks:expr, $s:ident =>
+    ($ty:ty, $storage:ident, $test:ident, $init:expr, $hooks:expr, $s:ident =>
         $($name:ident => $body:block),* $(,)?
     ) => {
-        static $cases_static: &'static [$crate::suite::Case<$ty>] = &[$(
-            $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| $body)
-        ),*];
-
         static $storage: ::std::sync::OnceLock<::std::sync::Mutex<$ty>> =
             ::std::sync::OnceLock::new();
 
-        $(
-            #[test]
-            fn $name() {
-                let mut suite = $storage
-                    .get_or_init(|| ::std::sync::Mutex::new($init))
-                    .lock()
-                    .expect("suitecase: shared suite mutex poisoned");
-                $crate::suite::run(
-                    &mut *suite,
-                    $cases_static,
-                    $crate::suite::RunConfig::filter(stringify!($name)),
-                    &$hooks,
-                );
-            }
-        )*
+        #[test]
+        fn $test() {
+            let mut suite = $storage
+                .get_or_init(|| ::std::sync::Mutex::new($init))
+                .lock()
+                .expect("suitecase: shared suite mutex poisoned");
+            let cases: &[$crate::suite::Case<$ty>] = &[$(
+                $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| $body)
+            ),*];
+            $crate::suite::run_with_output(
+                &mut *suite,
+                cases,
+                $crate::suite::RunConfig::all(),
+                &$hooks,
+            );
+        }
     };
 }
 

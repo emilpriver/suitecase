@@ -209,7 +209,7 @@ static MY_HOOKS: HookFns<DbSuite> = HookFns {
 test_suite!(
     DbSuite,
     DB_SQLX_SUITE,
-    MY_CASES,
+    sqlx_sqlite_test_run,
     DbSuite::default(),
     MY_HOOKS,
     s =>
