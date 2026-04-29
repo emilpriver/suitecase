@@ -12,7 +12,8 @@ enum OutputMode {
 #[derive(Parser)]
 #[command(
     name = "suitecase",
-    about = "Run tests with formatted suitecase output"
+    about = "Run tests with formatted suitecase output",
+    version = env!("CARGO_PKG_VERSION"),
 )]
 struct Cli {
     #[command(subcommand)]
