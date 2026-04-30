@@ -417,13 +417,7 @@ fn parse_panics(stderr_lines: &[String]) -> Vec<PanicInfo> {
 fn parse_panic_header(line: &str) -> (String, Option<String>, Option<u32>) {
     let thread_name = line
         .strip_prefix("thread '")
-        .and_then(|rest| {
-            if let Some(end) = rest.find('\'') {
-                Some(rest[..end].to_string())
-            } else {
-                None
-            }
-        })
+        .and_then(|rest| rest.find('\'').map(|end| rest[..end].to_string()))
         .unwrap_or_default();
 
     let (file, line_num) = if let Some(colon_pos) = line.find("panicked at ") {
@@ -496,23 +490,23 @@ fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
         println!("{RED}{BOLD}✗ {name}{RESET}", name = case.name);
         println!("{DIM}  duration: {}ms{RESET}", case.ms);
 
-        if let Some(suite_test_name) = &case.suite_test_name {
-            if let Some(panic) = find_panic_for_suite(suite_test_name, panics) {
-                if !shown_panics.contains(suite_test_name) {
-                    shown_panics.insert(suite_test_name.clone());
-                    if let Some(ref file) = panic.file {
-                        let line_info = if let Some(line) = panic.line {
-                            format!("{}:{}", file, line)
-                        } else {
-                            file.clone()
-                        };
-                        println!("{DIM}  at {line_info}{RESET}");
-                    }
-                    println!("{RED}  {msg}{RESET}", msg = panic.message);
+        if let Some(suite_test_name) = &case.suite_test_name
+            && let Some(panic) = find_panic_for_suite(suite_test_name, panics)
+        {
+            if !shown_panics.contains(suite_test_name) {
+                shown_panics.insert(suite_test_name.clone());
+                if let Some(ref file) = panic.file {
+                    let line_info = if let Some(line) = panic.line {
+                        format!("{}:{}", file, line)
+                    } else {
+                        file.clone()
+                    };
+                    println!("{DIM}  at {line_info}{RESET}");
                 }
-                println!();
-                continue;
+                println!("{RED}  {msg}{RESET}", msg = panic.message);
             }
+            println!();
+            continue;
         }
 
         println!("{DIM}  (no panic details captured){RESET}");
@@ -527,19 +521,19 @@ fn print_github_failure_details(failed: &[&CaseResult], panics: &[PanicInfo]) {
 
     for case in failed {
         if let Some(suite_test_name) = &case.suite_test_name {
-            if let Some(panic) = find_panic_for_suite(suite_test_name, panics) {
-                if !shown_panics.contains(suite_test_name) {
-                    shown_panics.insert(suite_test_name.clone());
-                    let file_info = match (&panic.file, panic.line) {
-                        (Some(f), Some(l)) => format!("file={},line={},", f, l),
-                        _ => String::new(),
-                    };
-                    let message = panic.message.replace('\n', " ");
-                    println!(
-                        "::error {file_info}title={name}::{name} failed: {message}",
-                        name = case.name,
-                    );
-                }
+            if let Some(panic) = find_panic_for_suite(suite_test_name, panics)
+                && !shown_panics.contains(suite_test_name)
+            {
+                shown_panics.insert(suite_test_name.clone());
+                let file_info = match (&panic.file, panic.line) {
+                    (Some(f), Some(l)) => format!("file={},line={},", f, l),
+                    _ => String::new(),
+                };
+                let message = panic.message.replace('\n', " ");
+                println!(
+                    "::error {file_info}title={name}::{name} failed: {message}",
+                    name = case.name,
+                );
             }
         } else {
             println!("::error title={name}::{name} failed", name = case.name,);
