@@ -1,6 +1,6 @@
 [package]
 name = "suitecase"
-version = "0.0.9"
+version = "0.0.10"
 edition = "2024"
 description = "The structured test toolkit. A sync Rust crate for named cases, optional suite and per-case hooks, and macros so each case appears in cargo test—without a custom harness or DSL."
 documentation = "https://docs.rs/suitecase"
