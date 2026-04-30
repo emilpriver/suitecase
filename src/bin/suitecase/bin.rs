@@ -2,7 +2,7 @@ mod test;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-#[derive(Clone, ValueEnum, Default, PartialEq)]
+#[derive(Clone, Copy, ValueEnum, Default, PartialEq)]
 enum OutputMode {
     #[default]
     Tui,
@@ -46,7 +46,12 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Test { args, output, workspace, release } => {
+        Commands::Test {
+            args,
+            output,
+            workspace,
+            release,
+        } => {
             test::run(args, output, workspace, release);
         }
     }
