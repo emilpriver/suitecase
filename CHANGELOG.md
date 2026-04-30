@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+* Improved test output formatting ([#22](https://github.com/emilpriver/suitecase/pull/22))
+
 ## 0.0.9 — 2026-04-30
 
 ### Added
