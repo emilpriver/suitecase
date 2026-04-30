@@ -2,7 +2,7 @@ mod test;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-#[derive(Clone, ValueEnum, Default, PartialEq)]
+#[derive(Clone, Copy, ValueEnum, Default, PartialEq)]
 enum OutputMode {
     #[default]
     Tui,
