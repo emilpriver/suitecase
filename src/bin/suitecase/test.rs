@@ -115,14 +115,24 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                     println!();
                     println!("::group::{}::{}", parts[0], parts[1]);
                 } else {
-                    println!("{BOLD}── {storage} :: {test} ──{RESET}", storage = parts[0], test = parts[1]);
+                    println!(
+                        "{BOLD}── {storage} :: {test} ──{RESET}",
+                        storage = parts[0],
+                        test = parts[1]
+                    );
                 }
             }
         } else if let Some(result) = parse_case_line(&line) {
             total_results += 1;
             let suite_name = current_test.clone();
             let storage_name = current_storage.clone();
-            stream_case_result(&result, suite_name, storage_name, output, &mut current_cases);
+            stream_case_result(
+                &result,
+                suite_name,
+                storage_name,
+                output,
+                &mut current_cases,
+            );
         } else if let Some(result) = parse_cargo_test_line(&line) {
             total_results += 1;
             let case_result = CaseResult {
@@ -133,7 +143,10 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
             };
             stream_regular_result(&case_result, output);
             regular_tests.push(case_result);
-        } else if !trimmed.is_empty() && !trimmed.starts_with("▶ ") && !is_cargo_summary_line(trimmed) {
+        } else if !trimmed.is_empty()
+            && !trimmed.starts_with("▶ ")
+            && !is_cargo_summary_line(trimmed)
+        {
             stream_user_output(trimmed, output);
         }
     }
@@ -446,7 +459,10 @@ fn parse_panic_header(line: &str) -> (String, Option<String>, Option<u32>) {
     (thread_name, file, line_num)
 }
 
-fn find_panic_for_suite<'a>(suite_test_name: &str, panics: &'a [PanicInfo]) -> Option<&'a PanicInfo> {
+fn find_panic_for_suite<'a>(
+    suite_test_name: &str,
+    panics: &'a [PanicInfo],
+) -> Option<&'a PanicInfo> {
     panics.iter().find(|p| p.thread_name == suite_test_name)
 }
 
@@ -469,10 +485,7 @@ fn print_tui_summary(cases: &[&CaseResult]) {
     );
 }
 
-fn print_tui_failures(
-    failed: &[&CaseResult],
-    panics: &[PanicInfo],
-) {
+fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
     println!();
     println!("{RED}{BOLD}─── FAILURES ───{RESET}");
     println!();
@@ -509,10 +522,7 @@ fn print_tui_failures(
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
 }
 
-fn print_github_failure_details(
-    failed: &[&CaseResult],
-    panics: &[PanicInfo],
-) {
+fn print_github_failure_details(failed: &[&CaseResult], panics: &[PanicInfo]) {
     let mut shown_panics: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for case in failed {
@@ -532,10 +542,7 @@ fn print_github_failure_details(
                 }
             }
         } else {
-            println!(
-                "::error title={name}::{name} failed",
-                name = case.name,
-            );
+            println!("::error title={name}::{name} failed", name = case.name,);
         }
     }
 }
