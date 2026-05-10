@@ -4,7 +4,7 @@
 
 ### Changed
 
-* Removed per-test `::group::`/`::endgroup::` markers in GitHub Actions output to prevent interleaved log markers during parallel `cargo test` execution
+* Added per-test `::group::`/`::endgroup::` wrapping in GitHub Actions output so each test is individually collapsible ([#25](https://github.com/emilpriver/suitecase/pull/25))
 
 ## 0.1.0 — 2026-05-10
 
