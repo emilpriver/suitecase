@@ -23,4 +23,4 @@ jobs:
         run: cargo build --all-targets --verbose
 
       - name: Test
-        run: cargo test --all-targets --verbose
+        run: cargo run --bin suitecase -- test
