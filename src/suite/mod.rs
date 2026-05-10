@@ -361,6 +361,9 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                 }
             } else {
                 println!("✗ {} ({}ms)", case.name, ms);
+                if let Some(msg) = extract_panic_message(&payload) {
+                    eprintln!("suitecase::panic: {}: {}", case.name, msg);
+                }
                 failed_names.insert(case.name);
                 if first_panic.is_none() {
                     first_panic = Some(payload);
@@ -376,6 +379,16 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     }
     if let Some(payload) = first_panic {
         std::panic::resume_unwind(payload);
+    }
+}
+
+fn extract_panic_message(payload: &Box<dyn std::any::Any + Send>) -> Option<String> {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        Some(s.to_string())
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        Some(s.clone())
+    } else {
+        None
     }
 }
 
@@ -525,10 +538,10 @@ macro_rules! cases {
         $crate::cases!(@parse ($ty) ($s) [] $($rest)*)
     };
     (@parse ($ty:ty) ($s:ident) [$($out:expr),*] $name:ident (depends_on = [$($dep:ident),+ $(,)?]) => $body:block $(, $($rest:tt)*)?) => {
-        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty> { name: stringify!($name), run: |$s: &mut $ty| $body, dependencies: &[$(stringify!($dep)),+] }] $($($rest)*)?)
+        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty> { name: stringify!($name), run: |$s: &mut $ty| { let _ = &$s; $body }, dependencies: &[$(stringify!($dep)),+] }] $($($rest)*)?)
     };
     (@parse ($ty:ty) ($s:ident) [$($out:expr),*] $name:ident => $body:block $(, $($rest:tt)*)?) => {
-        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| $body)] $($($rest)*)?)
+        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| { let _ = &$s; $body })] $($($rest)*)?)
     };
     (@parse ($ty:ty) ($s:ident) [$($out:expr),*] ,) => {
         &[$($out),*]
