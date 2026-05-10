@@ -4,7 +4,7 @@
 
 ### Changed
 
-* Removed per-test `::group::`/`::endgroup::` markers in GitHub Actions output to prevent interleaved log markers during parallel `cargo test` execution ([#25](https://github.com/emilpriver/suitecase/pull/25))
+* Removed per-test `::group::`/`::endgroup::` markers in GitHub Actions output to prevent interleaved log markers during parallel `cargo test` execution
 
 ## 0.1.0 — 2026-05-10
 
