@@ -1,4 +1,4 @@
-use crate::{Case, HookFns, RunConfig, run, fail, fail_now};
+use crate::{Case, HookFns, RunConfig, fail, fail_now, run};
 
 #[derive(Default)]
 struct SelRecorder {
@@ -89,12 +89,7 @@ fn glob_pattern_matches_cases() {
         test_b => { s.push("test_b"); },
         other => { s.push("other"); },
     ];
-    run(
-        &mut suite,
-        cases,
-        RunConfig::pattern("test_*"),
-        &SEL_HOOKS,
-    );
+    run(&mut suite, cases, RunConfig::pattern("test_*"), &SEL_HOOKS);
     assert_eq!(
         suite.log,
         vec![
@@ -118,12 +113,7 @@ fn glob_pattern_prefix_match() {
         setup_cache => { s.push("setup_cache"); },
         teardown => { s.push("teardown"); },
     ];
-    run(
-        &mut suite,
-        cases,
-        RunConfig::pattern("setup_*"),
-        &SEL_HOOKS,
-    );
+    run(&mut suite, cases, RunConfig::pattern("setup_*"), &SEL_HOOKS);
     assert_eq!(
         suite.log,
         vec![
@@ -147,12 +137,7 @@ fn depends_on_runs_deps_before_target() {
         action(depends_on = [setup]) => { s.push("action"); },
         verify(depends_on = [action]) => { s.push("verify"); },
     ];
-    run(
-        &mut suite,
-        cases,
-        RunConfig::filter("verify"),
-        &SEL_HOOKS,
-    );
+    run(&mut suite, cases, RunConfig::filter("verify"), &SEL_HOOKS);
     assert_eq!(
         suite.log,
         vec![
@@ -179,12 +164,7 @@ fn depends_on_multiple_deps() {
         b => { s.push("b"); },
         c(depends_on = [a, b]) => { s.push("c"); },
     ];
-    run(
-        &mut suite,
-        cases,
-        RunConfig::filter("c"),
-        &SEL_HOOKS,
-    );
+    run(&mut suite, cases, RunConfig::filter("c"), &SEL_HOOKS);
     assert_eq!(
         suite.log,
         vec![
@@ -210,27 +190,25 @@ fn missing_dep_panics() {
     let cases: &[Case<SelRecorder>] = cases![SelRecorder, s =>
         only(depends_on = [nonexistent]) => { s.push("only"); },
     ];
-    run(
-        &mut suite,
-        cases,
-        RunConfig::filter("only"),
-        &SEL_HOOKS,
-    );
+    run(&mut suite, cases, RunConfig::filter("only"), &SEL_HOOKS);
 }
 
 #[test]
 #[should_panic(expected = "circular dependency")]
 fn circular_dep_panics() {
     let mut suite = SelRecorder::default();
-    let a = Case::<SelRecorder> { name: "a", run: |s| s.push("a"), dependencies: &["b"] };
-    let b = Case::<SelRecorder> { name: "b", run: |s| s.push("b"), dependencies: &["a"] };
+    let a = Case::<SelRecorder> {
+        name: "a",
+        run: |s| s.push("a"),
+        dependencies: &["b"],
+    };
+    let b = Case::<SelRecorder> {
+        name: "b",
+        run: |s| s.push("b"),
+        dependencies: &["a"],
+    };
     let cases: &[Case<SelRecorder>] = &[a, b];
-    run(
-        &mut suite,
-        cases,
-        RunConfig::filter("a"),
-        &SEL_HOOKS,
-    );
+    run(&mut suite, cases, RunConfig::filter("a"), &SEL_HOOKS);
 }
 
 #[test]
@@ -244,12 +222,7 @@ fn fail_in_dep_skips_dependents() {
     run(&mut suite, cases, RunConfig::all(), &SEL_HOOKS);
     assert_eq!(
         suite.log,
-        vec![
-            "setup_suite",
-            "before_each",
-            "after_each",
-            "teardown_suite",
-        ]
+        vec!["setup_suite", "before_each", "after_each", "teardown_suite",]
     );
 }
 
@@ -266,12 +239,7 @@ fn fail_now_in_dep_aborts_and_skips_dependents() {
     assert!(err.is_err());
     assert_eq!(
         suite.log,
-        vec![
-            "setup_suite",
-            "before_each",
-            "after_each",
-            "teardown_suite",
-        ]
+        vec!["setup_suite", "before_each", "after_each", "teardown_suite",]
     );
 }
 

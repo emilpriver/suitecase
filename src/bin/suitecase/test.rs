@@ -47,7 +47,13 @@ struct PanicInfo {
     message: String,
 }
 
-pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool, case: Option<String>) {
+pub fn run(
+    args: Vec<String>,
+    output: OutputMode,
+    workspace: bool,
+    release: bool,
+    case: Option<String>,
+) {
     let (cargo_args, test_args) = split_at_double_dash(&args);
 
     let mut cmd = Command::new("cargo");
@@ -99,8 +105,9 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
     for line in stdout.lines() {
         let line = line.expect("read stdout");
         let trimmed = line.trim();
+        let stripped = strip_ansi(trimmed);
 
-        if let Some(rest) = trimmed.strip_prefix("◆ ") {
+        if let Some(rest) = stripped.strip_prefix("◆ ") {
             flush_suite(
                 &mut suites,
                 &mut current_test,
@@ -120,7 +127,8 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                     );
                 }
             }
-        } else if let Some(result) = parse_case_line(&line) {
+        } else if let Some(_case_name) = stripped.strip_prefix("▶ ") {
+        } else if let Some(result) = parse_case_line(&stripped) {
             total_results += 1;
             let suite_name = current_test.clone();
             let storage_name = current_storage.clone();
@@ -131,7 +139,7 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                 output,
                 &mut current_cases,
             );
-        } else if let Some(result) = parse_cargo_test_line(&line) {
+        } else if let Some(result) = parse_cargo_test_line(&stripped) {
             total_results += 1;
             let case_result = CaseResult {
                 name: result.name.clone(),
@@ -141,11 +149,8 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
             };
             stream_regular_result(&case_result, output);
             regular_tests.push(case_result);
-        } else if !trimmed.is_empty()
-            && !trimmed.starts_with("▶ ")
-            && !is_cargo_summary_line(trimmed)
-        {
-            stream_user_output(trimmed, output);
+        } else if !stripped.is_empty() && !is_cargo_summary_line(&stripped) {
+            stream_user_output(&stripped, output);
         }
     }
 
@@ -185,21 +190,26 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
         .collect();
 
     let panics = parse_panics(&stderr_lines);
+    let fail_messages = parse_fail_messages(&stderr_lines);
 
     match output {
         OutputMode::Tui => {
             print_tui_summary(&all_cases);
             if !failed.is_empty() {
-                print_tui_failures(&failed, &panics);
+                print_tui_failures(&failed, &panics, &fail_messages);
             }
         }
         OutputMode::Github => {
-            print_github_failure_details(&failed, &panics);
+            print_github_failure_details(&failed, &panics, &fail_messages);
         }
     }
 
     if !exit_status.success() {
         std::process::exit(exit_status.code().unwrap_or(1));
+    }
+
+    if !failed.is_empty() {
+        std::process::exit(1);
     }
 }
 
@@ -209,13 +219,14 @@ fn flush_suite(
     current_storage: &mut Option<String>,
     current_cases: &mut Vec<CaseResult>,
 ) {
-    if let Some(test_name) = current_test.take() {
-        suites.push(SuiteResult {
-            storage_name: current_storage.take().unwrap_or_default(),
-            test_name,
-            cases: std::mem::take(current_cases),
-        });
+    if current_cases.is_empty() && current_test.is_none() {
+        return;
     }
+    suites.push(SuiteResult {
+        storage_name: current_storage.take().unwrap_or_default(),
+        test_name: current_test.take().unwrap_or_default(),
+        cases: std::mem::take(current_cases),
+    });
 }
 
 fn stream_case_result(
@@ -328,10 +339,27 @@ fn parse_cargo_test_line(line: &str) -> Option<ParsedCase> {
     None
 }
 
-fn parse_case_line(line: &str) -> Option<ParsedCase> {
-    let trimmed = line.trim();
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            chars.next(); // skip '['
+            while let Some(&next) = chars.peek() {
+                chars.next();
+                if next.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
 
-    if let Some(rest) = trimmed.strip_prefix("✓ ")
+fn parse_case_line(line: &str) -> Option<ParsedCase> {
+    if let Some(rest) = line.strip_prefix("✓ ")
         && let Some((name, ms)) = parse_timing(rest)
     {
         return Some(ParsedCase {
@@ -341,7 +369,7 @@ fn parse_case_line(line: &str) -> Option<ParsedCase> {
         });
     }
 
-    if let Some(rest) = trimmed.strip_prefix("✗ ")
+    if let Some(rest) = line.strip_prefix("✗ ")
         && let Some((name, ms)) = parse_timing(rest)
     {
         return Some(ParsedCase {
@@ -365,6 +393,37 @@ fn parse_timing(s: &str) -> Option<(String, u128)> {
         }
     }
     None
+}
+
+struct FailInfo {
+    case_name: String,
+    message: String,
+}
+
+fn parse_fail_messages(stderr_lines: &[String]) -> Vec<FailInfo> {
+    let mut fails = Vec::new();
+    for line in stderr_lines {
+        if let Some(rest) = line
+            .strip_prefix("suitecase::fail: ")
+            .or_else(|| line.strip_prefix("suitecase::fail_now: "))
+            .or_else(|| line.strip_prefix("suitecase::panic: "))
+        {
+            if let Some(colon_pos) = rest.find(": ") {
+                fails.push(FailInfo {
+                    case_name: rest[..colon_pos].to_string(),
+                    message: rest[colon_pos + 2..].to_string(),
+                });
+            }
+        }
+    }
+    fails
+}
+
+fn find_fail_for_case<'a>(case_name: &str, fails: &'a [FailInfo]) -> Option<&'a FailInfo> {
+    fails.iter().find(|f| f.case_name == case_name).or_else(|| {
+        let short_name = case_name.split("::").last().unwrap_or(case_name);
+        fails.iter().find(|f| f.case_name == short_name)
+    })
 }
 
 fn parse_panics(stderr_lines: &[String]) -> Vec<PanicInfo> {
@@ -472,7 +531,7 @@ fn print_tui_summary(cases: &[&CaseResult]) {
     );
 }
 
-fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
+fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo], fail_messages: &[FailInfo]) {
     println!();
     println!("{RED}{BOLD}─── FAILURES ───{RESET}");
     println!();
@@ -482,6 +541,12 @@ fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
     for case in failed {
         println!("{RED}{BOLD}✗ {name}{RESET}", name = case.name);
         println!("{DIM}  duration: {}ms{RESET}", case.ms);
+
+        if let Some(fail) = find_fail_for_case(&case.name, fail_messages) {
+            println!("{RED}  {msg}{RESET}", msg = fail.message);
+            println!();
+            continue;
+        }
 
         if let Some(suite_test_name) = &case.suite_test_name
             && let Some(panic) = find_panic_for_suite(suite_test_name, panics)
@@ -509,10 +574,23 @@ fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
 }
 
-fn print_github_failure_details(failed: &[&CaseResult], panics: &[PanicInfo]) {
+fn print_github_failure_details(
+    failed: &[&CaseResult],
+    panics: &[PanicInfo],
+    fail_messages: &[FailInfo],
+) {
     let mut shown_panics: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for case in failed {
+        if let Some(fail) = find_fail_for_case(&case.name, fail_messages) {
+            let message = fail.message.replace('\n', " ");
+            println!(
+                "::error title={name}::{name} failed: {message}",
+                name = case.name,
+            );
+            continue;
+        }
+
         if let Some(suite_test_name) = &case.suite_test_name {
             if let Some(panic) = find_panic_for_suite(suite_test_name, panics)
                 && !shown_panics.contains(suite_test_name)

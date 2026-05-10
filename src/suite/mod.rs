@@ -212,9 +212,8 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     FB: FnMut(&mut S),
     FA: FnMut(&mut S),
 {
-    let has_filter = config.filter.is_some()
-        || !config.filters.is_empty()
-        || config.pattern.is_some();
+    let has_filter =
+        config.filter.is_some() || !config.filters.is_empty() || config.pattern.is_some();
 
     let selected: Vec<&Case<S>> = if !has_filter {
         cases.iter().collect()
@@ -254,10 +253,8 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
         let resolved_names: std::collections::HashSet<&str> =
             resolved.iter().map(|c| c.name).collect();
 
-        let mut in_degree: std::collections::HashMap<&str, usize> = resolved_names
-            .iter()
-            .map(|n| (*n, 0))
-            .collect();
+        let mut in_degree: std::collections::HashMap<&str, usize> =
+            resolved_names.iter().map(|n| (*n, 0)).collect();
 
         for case in &resolved {
             for dep in case.dependencies {
@@ -304,10 +301,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     };
 
     if selected.is_empty() {
-        assert!(
-            !has_filter,
-            "suitecase: filter matched no cases"
-        );
+        assert!(!has_filter, "suitecase: filter matched no cases");
         return;
     }
 
@@ -319,9 +313,10 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     let mut skipped_names: std::collections::HashSet<&str> = std::collections::HashSet::new();
 
     for case in &selected {
-        let deps_failed = case.dependencies.iter().any(|d| {
-            failed_names.contains(*d) || skipped_names.contains(*d)
-        });
+        let deps_failed = case
+            .dependencies
+            .iter()
+            .any(|d| failed_names.contains(*d) || skipped_names.contains(*d));
 
         if deps_failed {
             skipped_names.insert(case.name);
@@ -343,6 +338,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                 match reason {
                     FailReason::Fail(msg) => {
                         println!("✗ {} ({}ms)", case.name, ms);
+                        eprintln!("suitecase::fail: {}: {}", case.name, msg);
                         failed_names.insert(case.name);
                         if fail_msg.is_none() {
                             fail_msg = Some(msg.clone());
@@ -350,6 +346,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                     }
                     FailReason::FailNow(msg) => {
                         println!("✗ {} ({}ms)", case.name, ms);
+                        eprintln!("suitecase::fail_now: {}: {}", case.name, msg);
                         failed_names.insert(case.name);
                         if fail_now_msg.is_none() {
                             fail_now_msg = Some(msg.clone());
@@ -359,6 +356,9 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                 }
             } else {
                 println!("✗ {} ({}ms)", case.name, ms);
+                if let Some(msg) = extract_panic_message(&payload) {
+                    eprintln!("suitecase::panic: {}: {}", case.name, msg);
+                }
                 failed_names.insert(case.name);
                 if first_panic.is_none() {
                     first_panic = Some(payload);
@@ -377,6 +377,16 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     }
 }
 
+fn extract_panic_message(payload: &Box<dyn std::any::Any + Send>) -> Option<String> {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        Some(s.to_string())
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        Some(s.clone())
+    } else {
+        None
+    }
+}
+
 fn pattern_match(pattern: &str, name: &str) -> bool {
     if is_regex_pattern(pattern) {
         match Regex::new(pattern) {
@@ -389,7 +399,12 @@ fn pattern_match(pattern: &str, name: &str) -> bool {
 }
 
 fn is_regex_pattern(pattern: &str) -> bool {
-    pattern.chars().any(|c| matches!(c, '^' | '$' | '.' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '|'))
+    pattern.chars().any(|c| {
+        matches!(
+            c,
+            '^' | '$' | '.' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '|'
+        )
+    })
 }
 
 fn glob_match(pattern: &str, name: &str) -> bool {
@@ -523,10 +538,10 @@ macro_rules! cases {
         $crate::cases!(@parse ($ty) ($s) [] $($rest)*)
     };
     (@parse ($ty:ty) ($s:ident) [$($out:expr),*] $name:ident (depends_on = [$($dep:ident),+ $(,)?]) => $body:block $(, $($rest:tt)*)?) => {
-        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty> { name: stringify!($name), run: |$s: &mut $ty| $body, dependencies: &[$(stringify!($dep)),+] }] $($($rest)*)?)
+        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty> { name: stringify!($name), run: |$s: &mut $ty| { let _ = &$s; $body }, dependencies: &[$(stringify!($dep)),+] }] $($($rest)*)?)
     };
     (@parse ($ty:ty) ($s:ident) [$($out:expr),*] $name:ident => $body:block $(, $($rest:tt)*)?) => {
-        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| $body)] $($($rest)*)?)
+        $crate::cases!(@parse ($ty) ($s) [$($out,)* $crate::suite::Case::<$ty>::new(stringify!($name), |$s: &mut $ty| { let _ = &$s; $body })] $($($rest)*)?)
     };
     (@parse ($ty:ty) ($s:ident) [$($out:expr),*] ,) => {
         &[$($out),*]
