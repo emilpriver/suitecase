@@ -47,6 +47,28 @@ suitecase test --example sqlx_sqlite
 suitecase test --lib -- shared_state    # filter by test name
 ```
 
+### Filtering individual cases
+
+Use `--case` to run a single case or a group of cases within a suite. Supports exact match, glob (`*`), and full regex:
+
+```sh
+suitecase test --lib --case "test_inc"           # exact match
+suitecase test --lib --case "test_*"             # glob pattern
+suitecase test --lib --case "^test_.*_verify$"   # regex
+```
+
+To enable CLI case filtering, use `RunConfig::from_args()` in your test code:
+
+```rust
+#[test]
+fn my_suite() {
+    let mut suite = MySuite::default();
+    run(&mut suite, CASES, RunConfig::from_args(), &HookFns::default());
+}
+```
+
+If `--case` is not provided, `RunConfig::from_args()` falls back to running all cases.
+
 Output:
 
 ```

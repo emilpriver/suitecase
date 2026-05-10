@@ -33,6 +33,8 @@ mod fail;
 use fail::FailReason;
 pub use fail::{fail, fail_now};
 
+use regex::Regex;
+
 /// Optional lifecycle callbacks. Each field is [`Some`] with a function to run at that point, or
 /// [`None`] to skip.
 ///
@@ -130,6 +132,38 @@ impl RunConfig {
             pattern: Some(pat.into()),
         }
     }
+
+    /// Reads `--case <pattern>` from `std::env::args()` and returns a config
+    /// that filters cases by regex or glob. Falls back to [`RunConfig::all`] if not found.
+    ///
+    /// If the pattern contains regex metacharacters (`^`, `$`, `.`, `+`, `?`, `(`, `)`,
+    /// `[`, `]`, `{`, `|`), it is treated as a regex. Otherwise it is treated as a glob
+    /// (`*` matches any characters).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use suitecase::{cases, run, Case, HookFns, RunConfig};
+    ///
+    /// #[derive(Default)]
+    /// struct Counter { n: i32 }
+    ///
+    /// static CASES: &[Case<Counter>] = cases![Counter, s =>
+    ///     test_inc => { s.n += 1; },
+    /// ];
+    ///
+    /// let mut suite = Counter::default();
+    /// run(&mut suite, CASES, RunConfig::from_args(), &HookFns::default());
+    /// ```
+    pub fn from_args() -> Self {
+        let args: Vec<String> = std::env::args().collect();
+        for i in 0..args.len() {
+            if args[i] == "--case" && i + 1 < args.len() {
+                return Self::pattern(&args[i + 1]);
+            }
+        }
+        Self::all()
+    }
 }
 
 /// Run the selected cases on `suite` using `hooks` for lifecycle callbacks.
@@ -201,7 +235,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                     return true;
                 }
                 if let Some(ref pat) = config.pattern {
-                    return glob_match(pat, c.name);
+                    return pattern_match(pat, c.name);
                 }
                 false
             })
@@ -341,6 +375,21 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     if let Some(payload) = first_panic {
         std::panic::resume_unwind(payload);
     }
+}
+
+fn pattern_match(pattern: &str, name: &str) -> bool {
+    if is_regex_pattern(pattern) {
+        match Regex::new(pattern) {
+            Ok(re) => re.is_match(name),
+            Err(_) => false,
+        }
+    } else {
+        glob_match(pattern, name)
+    }
+}
+
+fn is_regex_pattern(pattern: &str) -> bool {
+    pattern.chars().any(|c| matches!(c, '^' | '$' | '.' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '|'))
 }
 
 fn glob_match(pattern: &str, name: &str) -> bool {
