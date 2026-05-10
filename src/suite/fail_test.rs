@@ -1,4 +1,4 @@
-use crate::{Case, HookFns, RunConfig, run, fail, fail_now};
+use crate::{Case, HookFns, RunConfig, fail, fail_now, run};
 
 #[derive(Default)]
 struct FailRecorder {
@@ -52,10 +52,7 @@ fn fail_now_aborts_remaining_cases() {
         run(&mut suite, CASES, RunConfig::all(), &FAIL_HOOKS);
     }));
     assert!(err.is_err());
-    assert_eq!(
-        suite.log,
-        vec!["setup_suite", "first", "teardown_suite"]
-    );
+    assert_eq!(suite.log, vec!["setup_suite", "first", "teardown_suite"]);
 }
 
 #[test]
@@ -80,10 +77,7 @@ fn multiple_fail_only_first_records() {
         c => { s.push("c"); },
     ];
     run(&mut suite, CASES, RunConfig::all(), &FAIL_HOOKS);
-    assert_eq!(
-        suite.log,
-        vec!["setup_suite", "c", "teardown_suite"]
-    );
+    assert_eq!(suite.log, vec!["setup_suite", "c", "teardown_suite"]);
 }
 
 #[test]

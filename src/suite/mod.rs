@@ -212,9 +212,8 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     FB: FnMut(&mut S),
     FA: FnMut(&mut S),
 {
-    let has_filter = config.filter.is_some()
-        || !config.filters.is_empty()
-        || config.pattern.is_some();
+    let has_filter =
+        config.filter.is_some() || !config.filters.is_empty() || config.pattern.is_some();
 
     let selected: Vec<&Case<S>> = if !has_filter {
         cases.iter().collect()
@@ -254,10 +253,8 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
         let resolved_names: std::collections::HashSet<&str> =
             resolved.iter().map(|c| c.name).collect();
 
-        let mut in_degree: std::collections::HashMap<&str, usize> = resolved_names
-            .iter()
-            .map(|n| (*n, 0))
-            .collect();
+        let mut in_degree: std::collections::HashMap<&str, usize> =
+            resolved_names.iter().map(|n| (*n, 0)).collect();
 
         for case in &resolved {
             for dep in case.dependencies {
@@ -304,10 +301,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     };
 
     if selected.is_empty() {
-        assert!(
-            !has_filter,
-            "suitecase: filter matched no cases"
-        );
+        assert!(!has_filter, "suitecase: filter matched no cases");
         return;
     }
 
@@ -319,9 +313,10 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
     let mut skipped_names: std::collections::HashSet<&str> = std::collections::HashSet::new();
 
     for case in &selected {
-        let deps_failed = case.dependencies.iter().any(|d| {
-            failed_names.contains(*d) || skipped_names.contains(*d)
-        });
+        let deps_failed = case
+            .dependencies
+            .iter()
+            .any(|d| failed_names.contains(*d) || skipped_names.contains(*d));
 
         if deps_failed {
             skipped_names.insert(case.name);
@@ -404,7 +399,12 @@ fn pattern_match(pattern: &str, name: &str) -> bool {
 }
 
 fn is_regex_pattern(pattern: &str) -> bool {
-    pattern.chars().any(|c| matches!(c, '^' | '$' | '.' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '|'))
+    pattern.chars().any(|c| {
+        matches!(
+            c,
+            '^' | '$' | '.' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '|'
+        )
+    })
 }
 
 fn glob_match(pattern: &str, name: &str) -> bool {
