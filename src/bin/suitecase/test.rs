@@ -96,8 +96,6 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
         }
     });
 
-    let is_github = matches!(output, OutputMode::Github);
-
     for line in stdout.lines() {
         let line = line.expect("read stdout");
         let trimmed = line.trim();
@@ -108,17 +106,13 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                 &mut current_test,
                 &mut current_storage,
                 &mut current_cases,
-                is_github,
             );
 
             let parts: Vec<&str> = rest.splitn(2, ' ').collect();
             if parts.len() == 2 {
                 current_storage = Some(parts[0].to_string());
                 current_test = Some(parts[1].to_string());
-                if is_github {
-                    println!();
-                    println!("::group::{}::{}", parts[0], parts[1]);
-                } else {
+                if !matches!(output, OutputMode::Github) {
                     println!(
                         "{BOLD}── {storage} :: {test} ──{RESET}",
                         storage = parts[0],
@@ -160,7 +154,6 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
         &mut current_test,
         &mut current_storage,
         &mut current_cases,
-        is_github,
     );
 
     stderr_reader.join().expect("stderr thread panicked");
@@ -215,12 +208,8 @@ fn flush_suite(
     current_test: &mut Option<String>,
     current_storage: &mut Option<String>,
     current_cases: &mut Vec<CaseResult>,
-    is_github: bool,
 ) {
     if let Some(test_name) = current_test.take() {
-        if is_github {
-            println!("::endgroup::");
-        }
         suites.push(SuiteResult {
             storage_name: current_storage.take().unwrap_or_default(),
             test_name,
