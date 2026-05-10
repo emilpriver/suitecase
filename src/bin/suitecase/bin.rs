@@ -36,6 +36,10 @@ enum Commands {
         #[arg(long)]
         release: bool,
 
+        /// Filter cases by name (supports regex, e.g. "^test_.*_verify$")
+        #[arg(long)]
+        case: Option<String>,
+
         /// Arguments passed directly to cargo test
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         args: Vec<String>,
@@ -51,8 +55,9 @@ fn main() {
             output,
             workspace,
             release,
+            case,
         } => {
-            test::run(args, output, workspace, release);
+            test::run(args, output, workspace, release, case);
         }
     }
 }

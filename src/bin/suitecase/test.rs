@@ -47,7 +47,7 @@ struct PanicInfo {
     message: String,
 }
 
-pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool) {
+pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool, case: Option<String>) {
     let (cargo_args, test_args) = split_at_double_dash(&args);
 
     let mut cmd = Command::new("cargo");
@@ -63,6 +63,10 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
     }
     cmd.arg("--");
     cmd.arg("--nocapture");
+    if let Some(ref c) = case {
+        cmd.arg("--case");
+        cmd.arg(c);
+    }
     for arg in &test_args {
         cmd.arg(arg);
     }

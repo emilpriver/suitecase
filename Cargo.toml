@@ -10,6 +10,8 @@ license = "MIT"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+regex = "1"
+thiserror = "2.0.18"
 
 [[bin]]
 name = "suitecase"

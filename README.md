@@ -4,7 +4,7 @@
 
 **Heavy development:** The API is still evolving. Expect **breaking changes** between releases until a stable 1.0; pin an exact version (or git revision) in `Cargo.toml` if you need upgrades to be predictable.
 
-**Install · [Usage](#usage) · [CLI](#cli) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [AI-assisted changes](AI_USAGE.md) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
+**Install · [Usage](#usage) · [CLI](#cli) · [Case Selection](#case-selection) · [Dependencies](#case-dependencies-depends_on) · [Fail](#fail-and-fail_now) · [Assertions](#assertions-assert) · [Mocking](#mocking-mock) · [Examples](#examples) · [AI-assisted changes](AI_USAGE.md) · [Docs](https://docs.rs/suitecase)** (after publish; `cargo doc --open` locally)
 
 ---
 
@@ -12,6 +12,7 @@
 - **Sequential execution** — [`test_suite!`](https://docs.rs/suitecase/latest/suitecase/macro.test_suite.html) emits **one** `#[test]` that runs all cases in slice order. Cases that depend on earlier state (setup → mutate → assert) always execute correctly.
 - **Formatted output** — Each case prints `▶ name`, then `✓ name (Xms)` or `✗ name (Xms)`. All cases run even if one fails; the first panic is re-raised after completion.
 - **Hooks as optional fns** — [`HookFns`](https://docs.rs/suitecase/latest/suitecase/suite/struct.HookFns.html) holds `Option<fn(&mut S)>` per lifecycle slot; use [`None`] to skip.
+- **Case selection** — [`RunConfig::filter`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.filter), [`RunConfig::filters`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.filters), and [`RunConfig::pattern`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html#method.pattern) let you run a single case, a group, or a glob match. Dependencies declared via `depends_on` are auto-included.
 - **CLI** — `suitecase test` runs `suitecase test` and renders a formatted summary with pass/fail counts, per-case timing, and failure details.
 - **Assertions** — [`suitecase::assert`](https://docs.rs/suitecase/latest/suitecase/assert/index.html) provides [testify/assert](https://pkg.go.dev/github.com/stretchr/testify/assert)-style helpers (`equal`, `contains`, `assert_ok`, …) that **panic** on failure with clear messages ([`#[track_caller]`](https://doc.rust-lang.org/stable/std/panic/struct.Location.html) where applicable).
 - **Mocking** — [`suitecase::mock`](https://docs.rs/suitecase/latest/suitecase/mock/index.html) provides [testify/mock](https://pkg.go.dev/github.com/stretchr/testify/mock)-style **expectations** and **call recording** ([`Mock`](https://docs.rs/suitecase/latest/suitecase/mock/struct.Mock.html), [`mock_args!`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html)). Use [`suitecase::mock_args`](https://docs.rs/suitecase/latest/suitecase/macro.mock_args.html) at the crate root (same macro).
@@ -45,6 +46,28 @@ suitecase test --example quickstart
 suitecase test --example sqlx_sqlite
 suitecase test --lib -- shared_state    # filter by test name
 ```
+
+### Filtering individual cases
+
+Use `--case` to run a single case or a group of cases within a suite. Supports exact match, glob (`*`), and full regex:
+
+```sh
+suitecase test --lib --case "test_inc"           # exact match
+suitecase test --lib --case "test_*"             # glob pattern
+suitecase test --lib --case "^test_.*_verify$"   # regex
+```
+
+To enable CLI case filtering, use `RunConfig::from_args()` in your test code:
+
+```rust
+#[test]
+fn my_suite() {
+    let mut suite = MySuite::default();
+    run(&mut suite, CASES, RunConfig::from_args(), &HookFns::default());
+}
+```
+
+If `--case` is not provided, `RunConfig::from_args()` falls back to running all cases.
 
 Output:
 
@@ -110,6 +133,76 @@ Run: `suitecase test`.
 ### Hooks
 
 Pass [`HookFns`](https://docs.rs/suitecase/latest/suitecase/suite/struct.HookFns.html) as the last argument to [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html). Each field is `Option<fn(&mut S)>` — [`Some(...)]` or [`None`] / [`HookFns::default()`].
+
+### Case selection
+
+Run a single case, a group, or a glob pattern by passing a [`RunConfig`](https://docs.rs/suitecase/latest/suitecase/suite/struct.RunConfig.html) to [`run`](https://docs.rs/suitecase/latest/suitecase/suite/fn.run.html). Hooks (`setup_suite`, `teardown_suite`, `before_each`, `after_each`) still execute for selected cases.
+
+```rust
+use suitecase::{cases, run, Case, HookFns, RunConfig};
+
+#[derive(Default)]
+struct Counter { n: i32 }
+
+static CASES: &[Case<Counter>] = cases![Counter, s =>
+    test_a => { s.n = 1; },
+    test_b => { s.n = 2; },
+    test_c => { s.n = 3; },
+];
+
+// Single case
+run(&mut Counter::default(), CASES, RunConfig::filter("test_b"), &HookFns::default());
+
+// Multiple cases
+run(&mut Counter::default(), CASES, RunConfig::filters(["test_a".to_string(), "test_c".to_string()]), &HookFns::default());
+
+// Glob pattern (* matches any characters)
+run(&mut Counter::default(), CASES, RunConfig::pattern("test_*"), &HookFns::default());
+```
+
+### Case dependencies (`depends_on`)
+
+Declare that a case requires other cases to run first. When you filter to a case with dependencies, those dependencies are automatically included and run in topological order.
+
+```rust
+use suitecase::{cases, run, Case, HookFns, RunConfig};
+
+#[derive(Default)]
+struct Db { connected: bool, migrated: bool }
+
+static CASES: &[Case<Db>] = cases![Db, s =>
+    connect => { s.connected = true; },
+    migrate(depends_on = [connect]) => { s.migrated = true; },
+    query(depends_on = [migrate]) => { assert!(s.connected && s.migrated); },
+];
+
+// Running only "query" auto-includes connect → migrate → query
+let mut db = Db::default();
+run(&mut db, CASES, RunConfig::filter("query"), &HookFns::default());
+```
+
+Circular dependencies and missing dependencies **panic** at runtime.
+
+### Fail and fail_now
+
+Use [`suitecase::fail`](https://docs.rs/suitecase/latest/suitecase/fn.fail.html) and [`suitecase::fail_now`](https://docs.rs/suitecase/latest/suitecase/fn.fail_now.html) inside case bodies:
+
+- **`fail(msg)`** — marks the current case as failed, **continues** running remaining cases, exits cleanly (no re-panic).
+- **`fail_now(msg)`** — marks the current case as failed, **aborts** all remaining cases, runs `teardown_suite`, then panics.
+
+If a case fails via either function, cases that depend on it (via `depends_on`) are **skipped** (shown as `⊘`).
+
+```rust
+use suitecase::{cases, run, Case, HookFns, RunConfig, fail};
+
+#[derive(Default)]
+struct App { ready: bool }
+
+static CASES: &[Case<App>] = cases![App, s =>
+    setup => { s.ready = true; },
+    check => { if !s.ready { fail("not ready"); } },
+];
+```
 
 ### Sequential test suite (`test_suite!`)
 
