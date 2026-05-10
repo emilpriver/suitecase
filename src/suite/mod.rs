@@ -30,6 +30,7 @@
 //! Any hook that is [`None`] is skipped.
 
 mod fail;
+use fail::FailReason;
 pub use fail::{fail, fail_now};
 
 /// Optional lifecycle callbacks. Each field is [`Some`] with a function to run at that point, or
@@ -167,6 +168,8 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
 
     setup_suite(suite);
     let mut first_panic: Option<Box<dyn std::any::Any + Send>> = None;
+    let mut fail_msg: Option<String> = None;
+    let mut fail_now_msg: Option<String> = None;
     for case in selected {
         println!("▶ {}", case.name);
         let start = std::time::Instant::now();
@@ -178,15 +181,36 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
         let elapsed = start.elapsed();
         let ms = elapsed.as_millis();
         if let Err(payload) = case_result {
-            println!("✗ {} ({}ms)", case.name, ms);
-            if first_panic.is_none() {
-                first_panic = Some(payload);
+            if let Some(reason) = payload.downcast_ref::<FailReason>() {
+                match reason {
+                    FailReason::Fail(msg) => {
+                        println!("✗ {} ({}ms)", case.name, ms);
+                        if fail_msg.is_none() {
+                            fail_msg = Some(msg.clone());
+                        }
+                    }
+                    FailReason::FailNow(msg) => {
+                        println!("✗ {} ({}ms)", case.name, ms);
+                        if fail_now_msg.is_none() {
+                            fail_now_msg = Some(msg.clone());
+                        }
+                        break;
+                    }
+                }
+            } else {
+                println!("✗ {} ({}ms)", case.name, ms);
+                if first_panic.is_none() {
+                    first_panic = Some(payload);
+                }
             }
         } else {
             println!("✓ {} ({}ms)", case.name, ms);
         }
     }
     teardown_suite(suite);
+    if let Some(msg) = fail_now_msg {
+        panic!("suitecase: {}", msg);
+    }
     if let Some(payload) = first_panic {
         std::panic::resume_unwind(payload);
     }
@@ -242,7 +266,7 @@ macro_rules! cases {
 ///
 /// ```text
 /// test_suite! {
-///     $ty:ty, $storage:ident, $init:expr, $hooks:expr, $s:ident =>
+///     $ty:ty, $storage:ident, $test:ident, $init:expr, $hooks:expr, $s:ident =>
 ///         $($name:ident => $body:block),* $(,)?
 /// }
 /// ```
@@ -258,6 +282,27 @@ macro_rules! cases {
 /// test_suite!(
 ///     Counter,
 ///     MY_SUITE,
+///     counter_test,
+///     Counter::default(),
+///     HookFns::default(),
+///     s =>
+///     setup => { s.n = 1; },
+///     verify => { assert_eq!(s.n, 1); },
+/// );
+/// ```
+///
+/// # Example
+///
+/// ```
+/// use suitecase::{test_suite, HookFns};
+///
+/// #[derive(Default)]
+/// struct Counter { n: i32 }
+///
+/// test_suite!(
+///     Counter,
+///     MY_SUITE_2,
+///     counter_test_2,
 ///     Counter::default(),
 ///     HookFns::default(),
 ///     s =>
@@ -301,3 +346,6 @@ mod shared_state_test;
 
 #[cfg(test)]
 mod cargo_filter_output_test;
+
+#[cfg(test)]
+mod fail_test;

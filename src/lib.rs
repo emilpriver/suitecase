@@ -57,4 +57,4 @@ pub mod assert;
 pub mod mock;
 pub mod suite;
 
-pub use suite::{Case, HookFns, RunConfig, run};
+pub use suite::{fail, fail_now, Case, HookFns, RunConfig, run};
