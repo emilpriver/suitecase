@@ -127,14 +127,7 @@ pub fn run(
                     );
                 }
             }
-        } else if let Some(case_name) = stripped.strip_prefix("▶ ") {
-            if matches!(output, OutputMode::Github) {
-                let group_name = match &current_storage {
-                    Some(storage) => format!("{}::{}", storage, case_name),
-                    None => case_name.to_string(),
-                };
-                println!("::group::{}", group_name);
-            }
+        } else if let Some(_case_name) = stripped.strip_prefix("▶ ") {
         } else if let Some(result) = parse_case_line(&stripped) {
             total_results += 1;
             let suite_name = current_test.clone();
@@ -146,9 +139,6 @@ pub fn run(
                 output,
                 &mut current_cases,
             );
-            if matches!(output, OutputMode::Github) {
-                println!("::endgroup::");
-            }
         } else if let Some(result) = parse_cargo_test_line(&stripped) {
             total_results += 1;
             let case_result = CaseResult {
@@ -157,13 +147,7 @@ pub fn run(
                 ms: result.ms,
                 suite_test_name: None,
             };
-            if matches!(output, OutputMode::Github) {
-                println!("::group::{}", result.name);
-            }
             stream_regular_result(&case_result, output);
-            if matches!(output, OutputMode::Github) {
-                println!("::endgroup::");
-            }
             regular_tests.push(case_result);
         } else if !stripped.is_empty() && !is_cargo_summary_line(&stripped) {
             stream_user_output(&stripped, output);

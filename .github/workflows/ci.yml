@@ -22,8 +22,5 @@ jobs:
       - name: Build
         run: cargo build --all-targets --verbose
 
-      - name: Test - suitecase run
-        run: cargo run --bin suitecase -- test --output github
-
       - name: Test - normal suitecase run
         run: cargo test --all-targets --verbose
