@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0 — 2026-05-10
+
+### Added
+
+* Added `fail` and `fail_now` functions for explicit test failure control ([#23](https://github.com/emilpriver/suitecase/pull/23))
+* Added test dependency support via `depends_on` to order test case execution ([#23](https://github.com/emilpriver/suitecase/pull/23))
+* Added `--case` flag to CLI for filtering which test cases to run ([#23](https://github.com/emilpriver/suitecase/pull/23))
+
 ## 0.0.10 — 2026-04-30
 
 ### Changed
