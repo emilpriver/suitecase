@@ -343,6 +343,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                 match reason {
                     FailReason::Fail(msg) => {
                         println!("✗ {} ({}ms)", case.name, ms);
+                        eprintln!("suitecase::fail: {}: {}", case.name, msg);
                         failed_names.insert(case.name);
                         if fail_msg.is_none() {
                             fail_msg = Some(msg.clone());
@@ -350,6 +351,7 @@ fn run_hooks_with_output<S, FS, FT, FB, FA>(
                     }
                     FailReason::FailNow(msg) => {
                         println!("✗ {} ({}ms)", case.name, ms);
+                        eprintln!("suitecase::fail_now: {}: {}", case.name, msg);
                         failed_names.insert(case.name);
                         if fail_now_msg.is_none() {
                             fail_now_msg = Some(msg.clone());

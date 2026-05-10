@@ -201,16 +201,17 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
         .collect();
 
     let panics = parse_panics(&stderr_lines);
+    let fail_messages = parse_fail_messages(&stderr_lines);
 
     match output {
         OutputMode::Tui => {
             print_tui_summary(&all_cases);
             if !failed.is_empty() {
-                print_tui_failures(&failed, &panics);
+                print_tui_failures(&failed, &panics, &fail_messages);
             }
         }
         OutputMode::Github => {
-            print_github_failure_details(&failed, &panics);
+            print_github_failure_details(&failed, &panics, &fail_messages);
         }
     }
 
@@ -383,6 +384,32 @@ fn parse_timing(s: &str) -> Option<(String, u128)> {
     None
 }
 
+struct FailInfo {
+    case_name: String,
+    message: String,
+}
+
+fn parse_fail_messages(stderr_lines: &[String]) -> Vec<FailInfo> {
+    let mut fails = Vec::new();
+    for line in stderr_lines {
+        if let Some(rest) = line.strip_prefix("suitecase::fail: ")
+            .or_else(|| line.strip_prefix("suitecase::fail_now: "))
+        {
+            if let Some(colon_pos) = rest.find(": ") {
+                fails.push(FailInfo {
+                    case_name: rest[..colon_pos].to_string(),
+                    message: rest[colon_pos + 2..].to_string(),
+                });
+            }
+        }
+    }
+    fails
+}
+
+fn find_fail_for_case<'a>(case_name: &str, fails: &'a [FailInfo]) -> Option<&'a FailInfo> {
+    fails.iter().find(|f| f.case_name == case_name)
+}
+
 fn parse_panics(stderr_lines: &[String]) -> Vec<PanicInfo> {
     let mut panics: Vec<PanicInfo> = Vec::new();
     let mut i = 0;
@@ -488,7 +515,7 @@ fn print_tui_summary(cases: &[&CaseResult]) {
     );
 }
 
-fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
+fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo], fail_messages: &[FailInfo]) {
     println!();
     println!("{RED}{BOLD}─── FAILURES ───{RESET}");
     println!();
@@ -498,6 +525,12 @@ fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
     for case in failed {
         println!("{RED}{BOLD}✗ {name}{RESET}", name = case.name);
         println!("{DIM}  duration: {}ms{RESET}", case.ms);
+
+        if let Some(fail) = find_fail_for_case(&case.name, fail_messages) {
+            println!("{RED}  {msg}{RESET}", msg = fail.message);
+            println!();
+            continue;
+        }
 
         if let Some(suite_test_name) = &case.suite_test_name
             && let Some(panic) = find_panic_for_suite(suite_test_name, panics)
@@ -525,10 +558,19 @@ fn print_tui_failures(failed: &[&CaseResult], panics: &[PanicInfo]) {
     println!("{RED}{BOLD}─── END FAILURES ───{RESET}");
 }
 
-fn print_github_failure_details(failed: &[&CaseResult], panics: &[PanicInfo]) {
+fn print_github_failure_details(failed: &[&CaseResult], panics: &[PanicInfo], fail_messages: &[FailInfo]) {
     let mut shown_panics: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for case in failed {
+        if let Some(fail) = find_fail_for_case(&case.name, fail_messages) {
+            let message = fail.message.replace('\n', " ");
+            println!(
+                "::error title={name}::{name} failed: {message}",
+                name = case.name,
+            );
+            continue;
+        }
+
         if let Some(suite_test_name) = &case.suite_test_name {
             if let Some(panic) = find_panic_for_suite(suite_test_name, panics)
                 && !shown_panics.contains(suite_test_name)
