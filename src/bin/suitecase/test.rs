@@ -120,6 +120,14 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                     );
                 }
             }
+        } else if let Some(case_name) = trimmed.strip_prefix("▶ ") {
+            if matches!(output, OutputMode::Github) {
+                let group_name = match &current_storage {
+                    Some(storage) => format!("{}::{}", storage, case_name),
+                    None => case_name.to_string(),
+                };
+                println!("::group::{}", group_name);
+            }
         } else if let Some(result) = parse_case_line(&line) {
             total_results += 1;
             let suite_name = current_test.clone();
@@ -131,6 +139,9 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                 output,
                 &mut current_cases,
             );
+            if matches!(output, OutputMode::Github) {
+                println!("::endgroup::");
+            }
         } else if let Some(result) = parse_cargo_test_line(&line) {
             total_results += 1;
             let case_result = CaseResult {
@@ -139,10 +150,15 @@ pub fn run(args: Vec<String>, output: OutputMode, workspace: bool, release: bool
                 ms: result.ms,
                 suite_test_name: None,
             };
+            if matches!(output, OutputMode::Github) {
+                println!("::group::{}", result.name);
+            }
             stream_regular_result(&case_result, output);
+            if matches!(output, OutputMode::Github) {
+                println!("::endgroup::");
+            }
             regular_tests.push(case_result);
         } else if !trimmed.is_empty()
-            && !trimmed.starts_with("▶ ")
             && !is_cargo_summary_line(trimmed)
         {
             stream_user_output(trimmed, output);
