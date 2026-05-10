@@ -1342,6 +1342,7 @@ dependencies = [
  "clap",
  "serde_json",
  "sqlx",
+ "thiserror",
  "tokio",
 ]
 

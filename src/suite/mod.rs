@@ -29,6 +29,9 @@
 //!
 //! Any hook that is [`None`] is skipped.
 
+mod fail;
+pub use fail::{fail, fail_now};
+
 /// Optional lifecycle callbacks. Each field is [`Some`] with a function to run at that point, or
 /// [`None`] to skip.
 ///
